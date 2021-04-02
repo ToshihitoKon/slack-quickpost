@@ -1,25 +1,31 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"os"
 
 	"github.com/slack-go/slack"
+	flag "github.com/spf13/pflag"
 )
 
 func main() {
 	var (
-		channelID = flag.String("c", "", "post slack channel id")
-		text      = flag.String("t", "", "post text")
-		iconEmoji = flag.String("i", "", "icon emoji")
-		userName  = flag.String("u", "", "user name")
+		token     = os.Getenv("SLACK_TOKEN")
+		channelID = flag.String("channel", "", "post slack channel id")
+		text      = flag.String("text", "", "post text")
+		iconEmoji = flag.String("icon", "", "icon emoji")
+		userName  = flag.String("username", "", "user name")
 	)
 	flag.Parse()
 
-	token := os.Getenv("SLACK_TOKEN")
 	if token == "" {
-		log.Fatal("SLACK_TOKEN is required")
+		log.Fatal("error: SLACK_TOKEN is required")
+	}
+	if *channelID == "" {
+		log.Fatal("error: --channel option is required")
+	}
+	if *text == "" {
+		log.Fatal("error: --text option is required")
 	}
 
 	var (
