@@ -14,6 +14,7 @@ func main() {
 		channelID = flag.String("channel", "", "post slack channel id")
 		text      = flag.String("text", "", "post text")
 		iconEmoji = flag.String("icon", "", "icon emoji")
+		iconUrl   = flag.String("icon-url", "", "icon image url")
 		userName  = flag.String("username", "", "user name")
 	)
 	flag.Parse()
@@ -31,11 +32,17 @@ func main() {
 	var (
 		api  = slack.New(token)
 		opts = []slack.MsgOption{
-			slack.MsgOptionIconEmoji(*iconEmoji),
 			slack.MsgOptionText(*text, false),
 			slack.MsgOptionUsername(*userName),
 		}
 	)
+
+	if *iconEmoji != "" {
+		opts = append(opts, slack.MsgOptionIconEmoji(*iconEmoji))
+	}
+	if *iconUrl != "" {
+		opts = append(opts, slack.MsgOptionIconURL(*iconUrl))
+	}
 
 	log.Println(
 		api.PostMessage(
