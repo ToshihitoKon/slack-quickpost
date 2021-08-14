@@ -1,13 +1,20 @@
 # slack-quickpost
 
+## installation
+
+```
+go get github.com/ToshihitoKon/slack-quickpost
+```
+
 ## setup
 
-https://api.slack.com/apps/
+https://api.slack.com/apps/  
 make Slack App and set OAuth token
 
 ```
 export SLACK_TOKEN="xoxb-XXXXXXXX-XXXXXXX-XXXXXX"
 ```
+
 
 ## usase
 

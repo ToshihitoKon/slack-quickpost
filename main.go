@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -8,16 +9,28 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	var (
-		token     = os.Getenv("SLACK_TOKEN")
-		channelID = flag.String("channel", "", "post slack channel id")
-		text      = flag.String("text", "", "post text")
-		iconEmoji = flag.String("icon", "", "icon emoji")
-		iconUrl   = flag.String("icon-url", "", "icon image url")
-		userName  = flag.String("username", "", "user name")
+		token        = os.Getenv("SLACK_TOKEN")
+		channelID    = flag.String("channel", "", "post slack channel id")
+		text         = flag.String("text", "", "post text")
+		iconEmoji    = flag.String("icon", "", "icon emoji")
+		iconUrl      = flag.String("icon-url", "", "icon image url")
+		userName     = flag.String("username", "", "user name")
+		printVersion = flag.Bool("version", false, "print version")
 	)
 	flag.Parse()
+
+	if *printVersion {
+		fmt.Printf("%s\ncommit %s, built at %s", version, commit, date)
+		return
+	}
 
 	if token == "" {
 		log.Fatal("error: SLACK_TOKEN is required")
