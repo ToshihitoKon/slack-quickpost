@@ -4,16 +4,20 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime/debug"
 
 	"github.com/slack-go/slack"
 	flag "github.com/spf13/pflag"
 )
 
-var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
-)
+func version() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		// Goモジュールが無効など
+		return "(devel)"
+	}
+	return info.Main.Version
+}
 
 func main() {
 	var (
@@ -28,7 +32,7 @@ func main() {
 	flag.Parse()
 
 	if *printVersion {
-		fmt.Printf("%s\ncommit %s, built at %s", version, commit, date)
+		fmt.Println(version())
 		return
 	}
 

@@ -1,6 +1,6 @@
 module github.com/ToshihitoKon/slack-quickpost
 
-go 1.14
+go 1.15
 
 require (
 	github.com/slack-go/slack v0.8.2
