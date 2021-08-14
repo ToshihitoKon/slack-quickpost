@@ -4,19 +4,19 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"runtime/debug"
+  "runtime/debug"
 
 	"github.com/slack-go/slack"
 	flag "github.com/spf13/pflag"
 )
 
 func version() string {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		// Goモジュールが無効など
-		return "(devel)"
-	}
-	return info.Main.Version
+    info, ok := debug.ReadBuildInfo()
+    if !ok {
+        // Goモジュールが無効など
+        return "(devel)"
+    }
+    return info.Main.Version
 }
 
 func main() {
