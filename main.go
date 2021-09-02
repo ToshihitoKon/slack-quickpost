@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"runtime/debug"
@@ -23,10 +24,12 @@ func version() string {
 func main() {
 	var (
 		token        string
+		postText     string
 		envToken     = os.Getenv("SLACK_TOKEN")
 		optToken     = flag.String("token", "", "slack app OAuth token")
 		channelID    = flag.String("channel", "", "post slack channel id")
-		text         = flag.String("text", "", "post text")
+		optText      = flag.String("text", "", "post text")
+		optTextFile  = flag.String("textfile", "", "post text")
 		iconEmoji    = flag.String("icon", "", "icon emoji")
 		iconUrl      = flag.String("icon-url", "", "icon image url")
 		userName     = flag.String("username", "", "user name")
@@ -51,18 +54,27 @@ func main() {
 	if *channelID == "" {
 		errText = append(errText, "error: --channel option is required")
 	}
-	if *text == "" {
+	switch {
+	case *optText != "":
+		postText = strings.Replace(*optText, "\\n", "\n", -1)
+	case *optTextFile != "":
+		bytes, err := ioutil.ReadFile(*optTextFile)
+		if err != nil {
+			errText = append(errText, fmt.Sprintf("error: failed read text file: %s", err))
+		}
+		postText = string(bytes)
+	default:
 		errText = append(errText, "error: --text option is required")
 	}
+
 	if 0 < len(errText) {
 		fmt.Println(strings.Join(errText, "\n"))
 		os.Exit(1)
 	}
 
 	var (
-		api      = slack.New(token)
-		postText = strings.Replace(*text, "\\n", "\n", -1)
-		opts     = []slack.MsgOption{
+		api  = slack.New(token)
+		opts = []slack.MsgOption{
 			slack.MsgOptionText(postText, false),
 			slack.MsgOptionUsername(*userName),
 		}
