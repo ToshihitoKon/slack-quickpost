@@ -60,9 +60,10 @@ func main() {
 	}
 
 	var (
-		api  = slack.New(token)
-		opts = []slack.MsgOption{
-			slack.MsgOptionText(*text, false),
+		api      = slack.New(token)
+		postText = strings.Replace(*text, "\\n", "\n", -1)
+		opts     = []slack.MsgOption{
+			slack.MsgOptionText(postText, false),
 			slack.MsgOptionUsername(*userName),
 		}
 	)
