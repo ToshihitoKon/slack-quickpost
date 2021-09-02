@@ -22,7 +22,9 @@ func version() string {
 
 func main() {
 	var (
-		token        = flag.String("token", "", "slack app OAuth token")
+		token        string
+		envToken     = os.Getenv("SLACK_TOKEN")
+		optToken     = flag.String("token", "", "slack app OAuth token")
 		channelID    = flag.String("channel", "", "post slack channel id")
 		text         = flag.String("text", "", "post text")
 		iconEmoji    = flag.String("icon", "", "icon emoji")
@@ -38,11 +40,13 @@ func main() {
 	}
 
 	var errText []string
-	if *token == "" {
-		*token = os.Getenv("SLACK_TOKEN")
-		if *token == "" {
-			errText = append(errText, "error: SLACK_TOKEN env or --token option is required")
-		}
+	switch {
+	case *optToken != "":
+		token = *optToken
+	case envToken != "":
+		token = envToken
+	default:
+		errText = append(errText, "error: SLACK_TOKEN env or --token option is required")
 	}
 	if *channelID == "" {
 		errText = append(errText, "error: --channel option is required")
@@ -56,17 +60,17 @@ func main() {
 	}
 
 	var (
-		api  = slack.New(*token)
+		api  = slack.New(token)
 		opts = []slack.MsgOption{
 			slack.MsgOptionText(*text, false),
 			slack.MsgOptionUsername(*userName),
 		}
 	)
 
-	if *iconEmoji != "" {
+	switch {
+	case *iconEmoji != "":
 		opts = append(opts, slack.MsgOptionIconEmoji(*iconEmoji))
-	}
-	if *iconUrl != "" {
+	case *iconUrl != "":
 		opts = append(opts, slack.MsgOptionIconURL(*iconUrl))
 	}
 
