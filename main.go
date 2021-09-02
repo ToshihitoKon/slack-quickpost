@@ -4,24 +4,25 @@ import (
 	"fmt"
 	"log"
 	"os"
-  "runtime/debug"
+	"runtime/debug"
+	"strings"
 
 	"github.com/slack-go/slack"
 	flag "github.com/spf13/pflag"
 )
 
 func version() string {
-    info, ok := debug.ReadBuildInfo()
-    if !ok {
-        // Goモジュールが無効など
-        return "(devel)"
-    }
-    return info.Main.Version
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		// Goモジュールが無効など
+		return "(devel)"
+	}
+	return info.Main.Version
 }
 
 func main() {
 	var (
-		token        = os.Getenv("SLACK_TOKEN")
+		token        = flag.String("token", "", "slack app OAuth token")
 		channelID    = flag.String("channel", "", "post slack channel id")
 		text         = flag.String("text", "", "post text")
 		iconEmoji    = flag.String("icon", "", "icon emoji")
@@ -33,21 +34,29 @@ func main() {
 
 	if *printVersion {
 		fmt.Println(version())
-		return
+		os.Exit(0)
 	}
 
-	if token == "" {
-		log.Fatal("error: SLACK_TOKEN is required")
+	var errText []string
+	if *token == "" {
+		*token = os.Getenv("SLACK_TOKEN")
+		if *token == "" {
+			errText = append(errText, "error: SLACK_TOKEN env or --token option is required")
+		}
 	}
 	if *channelID == "" {
-		log.Fatal("error: --channel option is required")
+		errText = append(errText, "error: --channel option is required")
 	}
 	if *text == "" {
-		log.Fatal("error: --text option is required")
+		errText = append(errText, "error: --text option is required")
+	}
+	if 0 < len(errText) {
+		fmt.Println(strings.Join(errText, "\n"))
+		os.Exit(1)
 	}
 
 	var (
-		api  = slack.New(token)
+		api  = slack.New(*token)
 		opts = []slack.MsgOption{
 			slack.MsgOptionText(*text, false),
 			slack.MsgOptionUsername(*userName),
@@ -61,10 +70,12 @@ func main() {
 		opts = append(opts, slack.MsgOptionIconURL(*iconUrl))
 	}
 
-	log.Println(
-		api.PostMessage(
-			*channelID,
-			opts...,
-		),
+	channel, ts, err := api.PostMessage(
+		*channelID,
+		opts...,
 	)
+	if err != nil {
+		log.Fatal("error: slack.PostMessage failed", err)
+	}
+	fmt.Println("success", channel, ts)
 }
