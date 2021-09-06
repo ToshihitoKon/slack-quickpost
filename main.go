@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"runtime/debug"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/slack-go/slack"
 	flag "github.com/spf13/pflag"
 )
@@ -32,7 +34,7 @@ func main() {
 		optTextFile  = flag.String("textfile", "", "post text")
 		iconEmoji    = flag.String("icon", "", "icon emoji")
 		iconUrl      = flag.String("icon-url", "", "icon image url")
-		userName     = flag.String("username", "", "user name")
+		username     = flag.String("username", "", "user name")
 		printVersion = flag.Bool("version", false, "print version")
 	)
 	flag.Parse()
@@ -72,27 +74,78 @@ func main() {
 		os.Exit(1)
 	}
 
-	var (
-		api  = slack.New(token)
-		opts = []slack.MsgOption{
-			slack.MsgOptionText(postText, false),
-			slack.MsgOptionUsername(*userName),
+	slackClient := slack.New(token)
+	postOpts := postOptions{
+		Username:  *username,
+		Channel:   *channelID,
+		IconEmoji: *iconEmoji,
+		IconUrl:   *iconUrl,
+	}
+
+	// 3000文字以上は自動でスニペットにする
+	// https://api.slack.com/reference/block-kit/blocks#section_fields
+	if 3000 < len(postText) {
+		fmt.Println("[INFO] text length exceed limits (3000 characters), upload snippets.")
+		if err := postFile(slackClient, postOpts, strings.NewReader(postText), ""); err != nil {
+			log.Fatal("error: postFile ", err)
 		}
-	)
+	} else {
+		if err := postMessage(slackClient, postOpts, postText); err != nil {
+			log.Fatal("error: postMessage: ", err)
+		}
+	}
+}
+
+type postOptions struct {
+	Username  string
+	Channel   string
+	IconEmoji string
+	IconUrl   string
+}
+
+func (p *postOptions) getMsgOptions() []slack.MsgOption {
+	var opts []slack.MsgOption
 
 	switch {
-	case *iconEmoji != "":
-		opts = append(opts, slack.MsgOptionIconEmoji(*iconEmoji))
-	case *iconUrl != "":
-		opts = append(opts, slack.MsgOptionIconURL(*iconUrl))
+	case p.IconEmoji != "":
+		opts = append(opts, slack.MsgOptionIconEmoji(p.IconEmoji))
+	case p.IconUrl != "":
+		opts = append(opts, slack.MsgOptionIconURL(p.IconUrl))
 	}
 
-	channel, ts, err := api.PostMessage(
-		*channelID,
+	if p.Username != "" {
+		opts = append(opts, slack.MsgOptionUsername(p.Username))
+	}
+	return opts
+}
+
+func postMessage(client *slack.Client, postOpts postOptions, text string) error {
+	opts := []slack.MsgOption{}
+	opts = append(opts, postOpts.getMsgOptions()...)
+	opts = append(opts, slack.MsgOptionText(text, false))
+
+	// TODO: timestampはThread等に使いまわしができるので、いつか出力したい
+	_, ts, err := client.PostMessage(
+		postOpts.Channel,
 		opts...,
 	)
+	_ = ts
 	if err != nil {
-		log.Fatal("error: slack.PostMessage failed", err)
+		return errors.Wrap(err, "error postMessage")
 	}
-	fmt.Println("success", channel, ts)
+	return nil
+}
+
+func postFile(client *slack.Client, postOpts postOptions, fileReader io.Reader, comment string) error {
+	fups := slack.FileUploadParameters{
+		Filename:       "slack-quickpost",
+		Reader:         fileReader,
+		Filetype:       "auto",
+		InitialComment: comment,
+		Channels:       []string{postOpts.Channel},
+	}
+	if _, err := client.UploadFile(fups); err != nil {
+		return errors.Wrap(err, "error postFile")
+	}
+	return nil
 }
