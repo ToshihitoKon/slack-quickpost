@@ -6,8 +6,10 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/slack-go/slack"
@@ -32,7 +34,7 @@ func main() {
 		optTextFile = flag.String("textfile", "", "post text file path")
 		snippetMode = flag.Bool("snippet", false, "post text as snippet")
 		// mode: post file
-		filepath = flag.String("file", "", "post file path")
+		optFilepath = flag.String("file", "", "post file path")
 
 		// must options
 		envToken  = os.Getenv("SLACK_TOKEN")
@@ -47,6 +49,7 @@ func main() {
 		token    string
 		postText string
 		errText  []string
+		mode     string
 	)
 	flag.Parse()
 
@@ -67,14 +70,6 @@ func main() {
 		errText = append(errText, "error: --channel option is required")
 	}
 
-	postOpts := postOptions{
-		Username:  *username,
-		Channel:   *channelID,
-		IconEmoji: *iconEmoji,
-		IconUrl:   *iconUrl,
-	}
-	mode := ""
-
 	switch {
 	case *optText != "":
 		postText = strings.Replace(*optText, "\\n", "\n", -1)
@@ -86,17 +81,28 @@ func main() {
 		}
 		postText = string(bytes)
 		mode = "text"
-	case *filepath != "":
-		mode = "file"
-	default:
-		errText = append(errText, "error: --text option is required")
 	}
+	if *optFilepath != "" {
+		mode = "file"
+	}
+	if mode == "" {
+		errText = append(errText, "error: --text or --file is required")
+	}
+
 	if 0 < len(errText) {
 		fmt.Println(strings.Join(errText, "\n"))
 		os.Exit(1)
 	}
 
-	slackClient := slack.New(token)
+	var (
+		slackClient = slack.New(token)
+		postOpts    = postOptions{
+			Username:  *username,
+			Channel:   *channelID,
+			IconEmoji: *iconEmoji,
+			IconUrl:   *iconUrl,
+		}
+	)
 
 	switch mode {
 	case "text":
@@ -108,7 +114,7 @@ func main() {
 		}
 
 		if *snippetMode {
-			if err := postFile(slackClient, postOpts, strings.NewReader(postText), ""); err != nil {
+			if err := postFile(slackClient, postOpts, strings.NewReader(postText), "", ""); err != nil {
 				log.Fatal("error: postFile ", err)
 			}
 		} else {
@@ -117,12 +123,13 @@ func main() {
 			}
 		}
 	case "file":
-		if *filepath != "" {
-			f, err := os.Open(*filepath)
+		if *optFilepath != "" {
+			file, err := os.Open(*optFilepath)
 			if err != nil {
-				log.Fatal("error: open file, ", *filepath)
+				log.Fatal("error: open file, ", *optFilepath)
 			}
-			if err := postFile(slackClient, postOpts, f, ""); err != nil {
+			filename := filepath.Base(*optFilepath)
+			if err := postFile(slackClient, postOpts, file, filename, postText); err != nil {
 				log.Fatal("error: postFile ", err)
 			}
 		}
@@ -169,9 +176,12 @@ func postMessage(client *slack.Client, postOpts postOptions, text string) error 
 	return nil
 }
 
-func postFile(client *slack.Client, postOpts postOptions, fileReader io.Reader, comment string) error {
+func postFile(client *slack.Client, postOpts postOptions, fileReader io.Reader, filename, comment string) error {
+	if filename == "" {
+		filename = fmt.Sprintf("%s.txt", time.Now().Format("20060102_150405"))
+	}
 	fups := slack.FileUploadParameters{
-		Filename:       "slack-quickpost",
+		Filename:       filename,
 		Reader:         fileReader,
 		Filetype:       "auto",
 		InitialComment: comment,
