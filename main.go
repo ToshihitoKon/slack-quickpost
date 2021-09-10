@@ -25,17 +25,28 @@ func version() string {
 
 func main() {
 	var (
-		token        string
-		postText     string
-		envToken     = os.Getenv("SLACK_TOKEN")
-		optToken     = flag.String("token", "", "slack app OAuth token")
-		channelID    = flag.String("channel", "", "post slack channel id")
-		optText      = flag.String("text", "", "post text")
-		optTextFile  = flag.String("textfile", "", "post text")
-		iconEmoji    = flag.String("icon", "", "icon emoji")
-		iconUrl      = flag.String("icon-url", "", "icon image url")
-		username     = flag.String("username", "", "user name")
+		// mode: print version
 		printVersion = flag.Bool("version", false, "print version")
+		// mode: post text
+		optText     = flag.String("text", "", "post text")
+		optTextFile = flag.String("textfile", "", "post text file path")
+		snippetMode = flag.Bool("snippet", false, "post text as snippet")
+		// mode: post file
+		filepath = flag.String("file", "", "post file path")
+
+		// must options
+		envToken  = os.Getenv("SLACK_TOKEN")
+		optToken  = flag.String("token", "", "slack app OAuth token")
+		channelID = flag.String("channel", "", "post slack channel id")
+
+		// optional
+		iconEmoji = flag.String("icon", "", "icon emoji")
+		iconUrl   = flag.String("icon-url", "", "icon image url")
+		username  = flag.String("username", "", "user name")
+
+		token    string
+		postText string
+		errText  []string
 	)
 	flag.Parse()
 
@@ -44,7 +55,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	var errText []string
 	switch {
 	case *optToken != "":
 		token = *optToken
@@ -56,42 +66,65 @@ func main() {
 	if *channelID == "" {
 		errText = append(errText, "error: --channel option is required")
 	}
-	switch {
-	case *optText != "":
-		postText = strings.Replace(*optText, "\\n", "\n", -1)
-	case *optTextFile != "":
-		bytes, err := ioutil.ReadFile(*optTextFile)
-		if err != nil {
-			errText = append(errText, fmt.Sprintf("error: failed read text file: %s", err))
-		}
-		postText = string(bytes)
-	default:
-		errText = append(errText, "error: --text option is required")
-	}
 
-	if 0 < len(errText) {
-		fmt.Println(strings.Join(errText, "\n"))
-		os.Exit(1)
-	}
-
-	slackClient := slack.New(token)
 	postOpts := postOptions{
 		Username:  *username,
 		Channel:   *channelID,
 		IconEmoji: *iconEmoji,
 		IconUrl:   *iconUrl,
 	}
+	mode := ""
 
-	// 3000文字以上は自動でスニペットにする
-	// https://api.slack.com/reference/block-kit/blocks#section_fields
-	if 3000 < len(postText) {
-		fmt.Println("[INFO] text length exceed limits (3000 characters), upload snippets.")
-		if err := postFile(slackClient, postOpts, strings.NewReader(postText), ""); err != nil {
-			log.Fatal("error: postFile ", err)
+	switch {
+	case *optText != "":
+		postText = strings.Replace(*optText, "\\n", "\n", -1)
+		mode = "text"
+	case *optTextFile != "":
+		bytes, err := ioutil.ReadFile(*optTextFile)
+		if err != nil {
+			errText = append(errText, fmt.Sprintf("error: failed read text file: %s", err))
 		}
-	} else {
-		if err := postMessage(slackClient, postOpts, postText); err != nil {
-			log.Fatal("error: postMessage: ", err)
+		postText = string(bytes)
+		mode = "text"
+	case *filepath != "":
+		mode = "file"
+	default:
+		errText = append(errText, "error: --text option is required")
+	}
+	if 0 < len(errText) {
+		fmt.Println(strings.Join(errText, "\n"))
+		os.Exit(1)
+	}
+
+	slackClient := slack.New(token)
+
+	switch mode {
+	case "text":
+		// 3000文字以上は自動でスニペットにする
+		// https://api.slack.com/reference/block-kit/blocks#section_fields
+		if 3000 < len(postText) {
+			*snippetMode = true
+			fmt.Println("[INFO] text length exceed limits (3000 characters), upload snippets.")
+		}
+
+		if *snippetMode {
+			if err := postFile(slackClient, postOpts, strings.NewReader(postText), ""); err != nil {
+				log.Fatal("error: postFile ", err)
+			}
+		} else {
+			if err := postMessage(slackClient, postOpts, postText); err != nil {
+				log.Fatal("error: postMessage: ", err)
+			}
+		}
+	case "file":
+		if *filepath != "" {
+			f, err := os.Open(*filepath)
+			if err != nil {
+				log.Fatal("error: open file, ", *filepath)
+			}
+			if err := postFile(slackClient, postOpts, f, ""); err != nil {
+				log.Fatal("error: postFile ", err)
+			}
 		}
 	}
 }
