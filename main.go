@@ -120,6 +120,7 @@ func main() {
 	default:
 		errText = append(errText, "error: --text option is required")
 	}
+
 	if 0 < len(errText) {
 		fmt.Println(strings.Join(errText, "\n"))
 		if *noFail {
