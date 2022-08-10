@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/slack-go/slack"
@@ -117,7 +118,6 @@ func main() {
 	default:
 		errText = append(errText, "error: --text option is required")
 	}
-
 	if 0 < len(errText) {
 		fmt.Println(strings.Join(errText, "\n"))
 		if *noFail {
@@ -150,7 +150,7 @@ func Do(opts *Options) error {
 		}
 
 		if opts.snippetMode {
-			if err := postFile(slackClient, opts.postOpts, strings.NewReader(opts.text), ""); err != nil {
+			if err := postFile(slackClient, opts.postOpts, strings.NewReader(opts.text), "", ""); err != nil {
 				return errors.Wrap(err, "error postFile")
 			}
 		} else {
@@ -164,7 +164,7 @@ func Do(opts *Options) error {
 			if err != nil {
 				return errors.Wrapf(err, "error open file: %s", opts.filepath)
 			}
-			if err := postFile(slackClient, opts.postOpts, f, ""); err != nil {
+			if err := postFile(slackClient, opts.postOpts, f, "", ""); err != nil {
 				return errors.Wrapf(err, "error postFile %s", opts.filepath)
 			}
 		}
@@ -206,9 +206,12 @@ func postMessage(client *slack.Client, postOpts *PostOptions, text string) error
 	return nil
 }
 
-func postFile(client *slack.Client, postOpts *PostOptions, fileReader io.Reader, comment string) error {
+func postFile(client *slack.Client, postOpts *PostOptions, fileReader io.Reader, filename, comment string) error {
+	if filename == "" {
+		filename = fmt.Sprintf("%s.txt", time.Now().Format("20060102_150405"))
+	}
 	fups := slack.FileUploadParameters{
-		Filename:       "slack-quickpost",
+		Filename:       filename,
 		Reader:         fileReader,
 		Filetype:       "auto",
 		InitialComment: comment,
