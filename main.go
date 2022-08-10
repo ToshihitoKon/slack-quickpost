@@ -24,6 +24,8 @@ func version() string {
 }
 
 type Options struct {
+	slackClient SlackClient
+
 	token    string
 	text     string
 	filepath string
@@ -126,6 +128,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	opts.slackClient = slack.New(opts.token)
+
 	err := Do(opts)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -138,8 +142,6 @@ func main() {
 }
 
 func Do(opts *Options) error {
-	slackClient := slack.New(opts.token)
-
 	switch opts.mode {
 	case "text":
 		// 3000文字以上は自動でスニペットにする
@@ -150,11 +152,11 @@ func Do(opts *Options) error {
 		}
 
 		if opts.snippetMode {
-			if err := postFile(slackClient, opts.postOpts, strings.NewReader(opts.text), "", ""); err != nil {
+			if err := postFile(opts.slackClient, opts.postOpts, strings.NewReader(opts.text), "", ""); err != nil {
 				return errors.Wrap(err, "error postFile")
 			}
 		} else {
-			if err := postMessage(slackClient, opts.postOpts, opts.text); err != nil {
+			if err := postMessage(opts.slackClient, opts.postOpts, opts.text); err != nil {
 				return errors.Wrap(err, "error: postMessage")
 			}
 		}
@@ -164,7 +166,7 @@ func Do(opts *Options) error {
 			if err != nil {
 				return errors.Wrapf(err, "error open file: %s", opts.filepath)
 			}
-			if err := postFile(slackClient, opts.postOpts, f, "", ""); err != nil {
+			if err := postFile(opts.slackClient, opts.postOpts, f, "", ""); err != nil {
 				return errors.Wrapf(err, "error postFile %s", opts.filepath)
 			}
 		}
@@ -189,7 +191,7 @@ func (p *PostOptions) getMsgOptions() []slack.MsgOption {
 	return opts
 }
 
-func postMessage(client *slack.Client, postOpts *PostOptions, text string) error {
+func postMessage(client SlackClient, postOpts *PostOptions, text string) error {
 	opts := []slack.MsgOption{}
 	opts = append(opts, postOpts.getMsgOptions()...)
 	opts = append(opts, slack.MsgOptionText(text, false))
@@ -206,7 +208,7 @@ func postMessage(client *slack.Client, postOpts *PostOptions, text string) error
 	return nil
 }
 
-func postFile(client *slack.Client, postOpts *PostOptions, fileReader io.Reader, filename, comment string) error {
+func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, filename, comment string) error {
 	if filename == "" {
 		filename = fmt.Sprintf("%s.txt", time.Now().Format("20060102_150405"))
 	}
