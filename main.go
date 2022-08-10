@@ -63,6 +63,8 @@ func main() {
 		iconUrl   = flag.String("icon-url", "", "icon image url")
 		username  = flag.String("username", "", "user name")
 
+		noFail = flag.Bool("nofail", false, "always return success code(0)")
+
 		errText []string
 	)
 	flag.Parse()
@@ -118,11 +120,18 @@ func main() {
 
 	if 0 < len(errText) {
 		fmt.Println(strings.Join(errText, "\n"))
+		if *noFail {
+			os.Exit(0)
+		}
 		os.Exit(1)
 	}
 
 	err := Do(opts)
 	if err != nil {
+		fmt.Println(err.Error())
+		if *noFail {
+			os.Exit(0)
+		}
 		os.Exit(1)
 	}
 	return
@@ -142,24 +151,25 @@ func Do(opts *Options) error {
 
 		if opts.snippetMode {
 			if err := postFile(slackClient, opts.postOpts, strings.NewReader(opts.text), ""); err != nil {
-				return fmt.Errorf("error: postFile %w", err)
+				return errors.Wrap(err, "error postFile")
 			}
 		} else {
 			if err := postMessage(slackClient, opts.postOpts, opts.text); err != nil {
-				return fmt.Errorf("error: postMessage: %w", err)
+				return errors.Wrap(err, "error: postMessage")
 			}
 		}
 	case "file":
 		if opts.filepath != "" {
 			f, err := os.Open(opts.filepath)
 			if err != nil {
-				return fmt.Errorf("error: open file %s", opts.filepath)
+				return errors.Wrapf(err, "error open file: %s", opts.filepath)
 			}
 			if err := postFile(slackClient, opts.postOpts, f, ""); err != nil {
-				return fmt.Errorf("error: postFile %w", err)
+				return errors.Wrapf(err, "error postFile %s", opts.filepath)
 			}
 		}
 	}
+
 	return nil
 }
 
