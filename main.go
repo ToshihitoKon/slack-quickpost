@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"runtime/debug"
 	"strings"
@@ -23,14 +22,34 @@ func version() string {
 	return info.Main.Version
 }
 
+type Options struct {
+	token    string
+	text     string
+	filepath string
+
+	mode        string
+	snippetMode bool
+
+	postOpts *PostOptions
+}
+
+type PostOptions struct {
+	username  string
+	channel   string
+	iconEmoji string
+	iconUrl   string
+}
+
 func main() {
 	var (
 		// mode: print version
 		printVersion = flag.Bool("version", false, "print version")
+
 		// mode: post text
 		optText     = flag.String("text", "", "post text")
 		optTextFile = flag.String("textfile", "", "post text file path")
 		snippetMode = flag.Bool("snippet", false, "post text as snippet")
+
 		// mode: post file
 		filepath = flag.String("file", "", "post file path")
 
@@ -44,9 +63,7 @@ func main() {
 		iconUrl   = flag.String("icon-url", "", "icon image url")
 		username  = flag.String("username", "", "user name")
 
-		token    string
-		postText string
-		errText  []string
+		errText []string
 	)
 	flag.Parse()
 
@@ -55,111 +72,121 @@ func main() {
 		os.Exit(0)
 	}
 
+	opts := &Options{
+		snippetMode: *snippetMode,
+		filepath:    *filepath,
+		postOpts: &PostOptions{
+			username:  *username,
+			channel:   *channelID,
+			iconEmoji: *iconEmoji,
+			iconUrl:   *iconUrl,
+		},
+	}
+
+	// token
 	switch {
 	case *optToken != "":
-		token = *optToken
+		opts.token = *optToken
 	case envToken != "":
-		token = envToken
+		opts.token = envToken
 	default:
 		errText = append(errText, "error: SLACK_TOKEN env or --token option is required")
 	}
+
 	if *channelID == "" {
 		errText = append(errText, "error: --channel option is required")
 	}
 
-	postOpts := postOptions{
-		Username:  *username,
-		Channel:   *channelID,
-		IconEmoji: *iconEmoji,
-		IconUrl:   *iconUrl,
-	}
-	mode := ""
-
+	// post mode
 	switch {
 	case *optText != "":
-		postText = strings.Replace(*optText, "\\n", "\n", -1)
-		mode = "text"
+		opts.text = strings.Replace(*optText, "\\n", "\n", -1)
+		opts.mode = "text"
 	case *optTextFile != "":
 		bytes, err := ioutil.ReadFile(*optTextFile)
 		if err != nil {
 			errText = append(errText, fmt.Sprintf("error: failed read text file: %s", err))
 		}
-		postText = string(bytes)
-		mode = "text"
+		opts.text = string(bytes)
+		opts.mode = "text"
 	case *filepath != "":
-		mode = "file"
+		opts.filepath = *filepath
+		opts.mode = "file"
 	default:
 		errText = append(errText, "error: --text option is required")
 	}
+
 	if 0 < len(errText) {
 		fmt.Println(strings.Join(errText, "\n"))
 		os.Exit(1)
 	}
 
-	slackClient := slack.New(token)
+	err := Do(opts)
+	if err != nil {
+		os.Exit(1)
+	}
+	return
+}
 
-	switch mode {
+func Do(opts *Options) error {
+	slackClient := slack.New(opts.token)
+
+	switch opts.mode {
 	case "text":
 		// 3000文字以上は自動でスニペットにする
 		// https://api.slack.com/reference/block-kit/blocks#section_fields
-		if 3000 < len(postText) {
-			*snippetMode = true
+		if 3000 < len(opts.text) {
+			opts.snippetMode = true
 			fmt.Println("[INFO] text length exceed limits (3000 characters), upload snippets.")
 		}
 
-		if *snippetMode {
-			if err := postFile(slackClient, postOpts, strings.NewReader(postText), ""); err != nil {
-				log.Fatal("error: postFile ", err)
+		if opts.snippetMode {
+			if err := postFile(slackClient, opts.postOpts, strings.NewReader(opts.text), ""); err != nil {
+				return fmt.Errorf("error: postFile %w", err)
 			}
 		} else {
-			if err := postMessage(slackClient, postOpts, postText); err != nil {
-				log.Fatal("error: postMessage: ", err)
+			if err := postMessage(slackClient, opts.postOpts, opts.text); err != nil {
+				return fmt.Errorf("error: postMessage: %w", err)
 			}
 		}
 	case "file":
-		if *filepath != "" {
-			f, err := os.Open(*filepath)
+		if opts.filepath != "" {
+			f, err := os.Open(opts.filepath)
 			if err != nil {
-				log.Fatal("error: open file, ", *filepath)
+				return fmt.Errorf("error: open file %s", opts.filepath)
 			}
-			if err := postFile(slackClient, postOpts, f, ""); err != nil {
-				log.Fatal("error: postFile ", err)
+			if err := postFile(slackClient, opts.postOpts, f, ""); err != nil {
+				return fmt.Errorf("error: postFile %w", err)
 			}
 		}
 	}
+	return nil
 }
 
-type postOptions struct {
-	Username  string
-	Channel   string
-	IconEmoji string
-	IconUrl   string
-}
-
-func (p *postOptions) getMsgOptions() []slack.MsgOption {
+func (p *PostOptions) getMsgOptions() []slack.MsgOption {
 	var opts []slack.MsgOption
 
 	switch {
-	case p.IconEmoji != "":
-		opts = append(opts, slack.MsgOptionIconEmoji(p.IconEmoji))
-	case p.IconUrl != "":
-		opts = append(opts, slack.MsgOptionIconURL(p.IconUrl))
+	case p.iconEmoji != "":
+		opts = append(opts, slack.MsgOptionIconEmoji(p.iconEmoji))
+	case p.iconUrl != "":
+		opts = append(opts, slack.MsgOptionIconURL(p.iconUrl))
 	}
 
-	if p.Username != "" {
-		opts = append(opts, slack.MsgOptionUsername(p.Username))
+	if p.username != "" {
+		opts = append(opts, slack.MsgOptionUsername(p.username))
 	}
 	return opts
 }
 
-func postMessage(client *slack.Client, postOpts postOptions, text string) error {
+func postMessage(client *slack.Client, postOpts *PostOptions, text string) error {
 	opts := []slack.MsgOption{}
 	opts = append(opts, postOpts.getMsgOptions()...)
 	opts = append(opts, slack.MsgOptionText(text, false))
 
 	// TODO: timestampはThread等に使いまわしができるので、いつか出力したい
 	_, ts, err := client.PostMessage(
-		postOpts.Channel,
+		postOpts.channel,
 		opts...,
 	)
 	_ = ts
@@ -169,13 +196,13 @@ func postMessage(client *slack.Client, postOpts postOptions, text string) error 
 	return nil
 }
 
-func postFile(client *slack.Client, postOpts postOptions, fileReader io.Reader, comment string) error {
+func postFile(client *slack.Client, postOpts *PostOptions, fileReader io.Reader, comment string) error {
 	fups := slack.FileUploadParameters{
 		Filename:       "slack-quickpost",
 		Reader:         fileReader,
 		Filetype:       "auto",
 		InitialComment: comment,
-		Channels:       []string{postOpts.Channel},
+		Channels:       []string{postOpts.channel},
 	}
 	if _, err := client.UploadFile(fups); err != nil {
 		return errors.Wrap(err, "error postFile")
