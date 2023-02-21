@@ -12,7 +12,7 @@ https://api.slack.com/apps/
 
 make Slack App and get OAuth token.
 
-## usase
+## usage
 
 OAuth token set environment variable or command option.
 
