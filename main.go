@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -163,11 +164,12 @@ func Do(opts *Options) error {
 		}
 	case "file":
 		if opts.filepath != "" {
-			f, err := os.Open(opts.filepath)
+			file, err := os.Open(opts.filepath)
 			if err != nil {
 				return errors.Wrapf(err, "error open file: %s", opts.filepath)
 			}
-			if err := postFile(opts.slackClient, opts.postOpts, f, "", ""); err != nil {
+			filename := filepath.Base(opts.filepath)
+			if err := postFile(opts.slackClient, opts.postOpts, file, filename, ""); err != nil {
 				return errors.Wrapf(err, "error postFile %s", opts.filepath)
 			}
 		}
