@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,6 +23,11 @@ func version() string {
 		return "(devel)"
 	}
 	return info.Main.Version
+}
+
+type CliOutput struct {
+	Channel   string `json:"channel"`
+	Timestamp string `json:"timestamp"`
 }
 
 type Options struct {
@@ -132,7 +138,7 @@ func main() {
 
 	opts.slackClient = slack.New(opts.token)
 
-	err := Do(opts)
+	output, err := Do(opts)
 	if err != nil {
 		fmt.Println(err.Error())
 		if *noFail {
@@ -140,10 +146,24 @@ func main() {
 		}
 		os.Exit(1)
 	}
+
+	b, err := json.Marshal(output)
+	if err != nil {
+		fmt.Println(err.Error())
+		if *noFail {
+			os.Exit(0)
+		}
+		os.Exit(1)
+	}
+
+	fmt.Printf("%s", b)
 	return
 }
 
-func Do(opts *Options) error {
+func Do(opts *Options) (*CliOutput, error) {
+	var err error
+	var output *CliOutput
+
 	switch opts.mode {
 	case "text":
 		// 3000文字以上は自動でスニペットにする
@@ -154,28 +174,31 @@ func Do(opts *Options) error {
 		}
 
 		if opts.snippetMode {
-			if err := postFile(opts.slackClient, opts.postOpts, strings.NewReader(opts.text), "", ""); err != nil {
-				return errors.Wrap(err, "error postFile")
+			output, err = postFile(opts.slackClient, opts.postOpts, strings.NewReader(opts.text), "", "")
+			if err != nil {
+				return nil, errors.Wrap(err, "error postFile")
 			}
 		} else {
-			if err := postMessage(opts.slackClient, opts.postOpts, opts.text); err != nil {
-				return errors.Wrap(err, "error: postMessage")
+			output, err = postMessage(opts.slackClient, opts.postOpts, opts.text)
+			if err != nil {
+				return nil, errors.Wrap(err, "error: postMessage")
 			}
 		}
 	case "file":
 		if opts.filepath != "" {
 			file, err := os.Open(opts.filepath)
 			if err != nil {
-				return errors.Wrapf(err, "error open file: %s", opts.filepath)
+				return nil, errors.Wrapf(err, "error open file: %s", opts.filepath)
 			}
 			filename := filepath.Base(opts.filepath)
-			if err := postFile(opts.slackClient, opts.postOpts, file, filename, ""); err != nil {
-				return errors.Wrapf(err, "error postFile %s", opts.filepath)
+			output, err = postFile(opts.slackClient, opts.postOpts, file, filename, "")
+			if err != nil {
+				return nil, errors.Wrapf(err, "error postFile %s", opts.filepath)
 			}
 		}
 	}
 
-	return nil
+	return output, nil
 }
 
 func (p *PostOptions) getMsgOptions() []slack.MsgOption {
@@ -194,24 +217,28 @@ func (p *PostOptions) getMsgOptions() []slack.MsgOption {
 	return opts
 }
 
-func postMessage(client SlackClient, postOpts *PostOptions, text string) error {
+func postMessage(client SlackClient, postOpts *PostOptions, text string) (*CliOutput, error) {
 	opts := []slack.MsgOption{}
 	opts = append(opts, postOpts.getMsgOptions()...)
 	opts = append(opts, slack.MsgOptionText(text, false))
 
-	// TODO: timestampはThread等に使いまわしができるので、いつか出力したい
-	_, ts, err := client.PostMessage(
+	postedChannel, ts, err := client.PostMessage(
 		postOpts.channel,
 		opts...,
 	)
-	_ = ts
 	if err != nil {
-		return errors.Wrap(err, "error postMessage")
+		return nil, errors.Wrap(err, "error postMessage")
 	}
-	return nil
+
+	output := &CliOutput{
+		Channel:   postedChannel,
+		Timestamp: ts,
+	}
+
+	return output, nil
 }
 
-func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, filename, comment string) error {
+func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, filename, comment string) (*CliOutput, error) {
 	if filename == "" {
 		filename = fmt.Sprintf("%s.txt", time.Now().Format("20060102_150405"))
 	}
@@ -223,7 +250,11 @@ func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, f
 		Channels:       []string{postOpts.channel},
 	}
 	if _, err := client.UploadFile(fups); err != nil {
-		return errors.Wrap(err, "error postFile")
+		return nil, errors.Wrap(err, "error postFile")
 	}
-	return nil
+	output := &CliOutput{
+		Channel: postOpts.channel,
+		// Timestamp: UploadFileはtimestampを取得できない
+	}
+	return output, nil
 }
