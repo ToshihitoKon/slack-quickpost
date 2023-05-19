@@ -48,6 +48,7 @@ type PostOptions struct {
 	channel   string
 	iconEmoji string
 	iconUrl   string
+	threadTs  string
 }
 
 func main() {
@@ -69,6 +70,7 @@ func main() {
 		channelID = flag.String("channel", "", "post slack channel id")
 
 		// optional
+		threadTs  = flag.String("thread-ts", "", "post under thread")
 		iconEmoji = flag.String("icon", "", "icon emoji")
 		iconUrl   = flag.String("icon-url", "", "icon image url")
 		username  = flag.String("username", "", "user name")
@@ -92,6 +94,7 @@ func main() {
 			channel:   *channelID,
 			iconEmoji: *iconEmoji,
 			iconUrl:   *iconUrl,
+			threadTs:  *threadTs,
 		},
 	}
 
@@ -204,6 +207,10 @@ func Do(opts *Options) (*CliOutput, error) {
 func (p *PostOptions) getMsgOptions() []slack.MsgOption {
 	var opts []slack.MsgOption
 
+	if p.threadTs != "" {
+		opts = append(opts, slack.MsgOptionTS(p.threadTs))
+	}
+
 	switch {
 	case p.iconEmoji != "":
 		opts = append(opts, slack.MsgOptionIconEmoji(p.iconEmoji))
@@ -243,11 +250,12 @@ func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, f
 		filename = fmt.Sprintf("%s.txt", time.Now().Format("20060102_150405"))
 	}
 	fups := slack.FileUploadParameters{
-		Filename:       filename,
-		Reader:         fileReader,
-		Filetype:       "auto",
-		InitialComment: comment,
-		Channels:       []string{postOpts.channel},
+		Filename:        filename,
+		Reader:          fileReader,
+		Filetype:        "auto",
+		InitialComment:  comment,
+		Channels:        []string{postOpts.channel},
+		ThreadTimestamp: postOpts.threadTs,
 	}
 	if _, err := client.UploadFile(fups); err != nil {
 		return nil, errors.Wrap(err, "error postFile")
