@@ -9,21 +9,21 @@ type SlackClient interface {
 	PostMessage(string, ...slack.MsgOption) (string, string, error)
 }
 
-type SlackClientMock struct {
+type SlackMockClient struct {
 	ContentType string
 }
 
-func NewSlackClientMock() *SlackClientMock {
-	return &SlackClientMock{}
+func NewSlackMockClient() *SlackMockClient {
+	return &SlackMockClient{}
 }
 
-func (scm *SlackClientMock) UploadFile(_ slack.FileUploadParameters) (*slack.File, error) {
-	scm.ContentType = "file"
+func (smc *SlackMockClient) UploadFile(_ slack.FileUploadParameters) (*slack.File, error) {
+	smc.ContentType = "file"
 	// TODO
 	return nil, nil
 }
-func (scm *SlackClientMock) PostMessage(_ string, opts ...slack.MsgOption) (string, string, error) {
-	scm.ContentType = "message"
+func (smc *SlackMockClient) PostMessage(_ string, opts ...slack.MsgOption) (string, string, error) {
+	smc.ContentType = "message"
 	// TODO
 	return "", "", nil
 }

@@ -39,25 +39,23 @@ $binpath --channel $channelID \
     --icon "tada" \
     --snippet
 
-cat << EOS > /tmp/slack-quickpost-test.txt
+cat << EOS > /tmp/slack-quickpost-test1.txt
 case given text filepath.
 EOS
 $binpath --channel $channelID \
-    --textfile /tmp/slack-quickpost-test
+    --textfile /tmp/slack-quickpost-test1.txt
 
-cat << EOS > /tmp/slack-quickpost-test.txt
+cat << EOS > /tmp/slack-quickpost-test2.txt
 case given texitfile path as file.
 post file mode, ignore username and icon.
 EOS
 $binpath --channel $channelID \
     --username "ignored username" \
     --icon "cry" \
-    --text "text file" \
-    --file /tmp/slack-quickpost-test
+    --file /tmp/slack-quickpost-test2.txt
 
 wget -O /tmp/slack-quickpost-test.jpg $iconUrl
 $binpath --channel $channelID  \
     --username "ignored username" \
     --icon "cry" \
-    --text "image file" \
     --file /tmp/slack-quickpost-test.jpg
