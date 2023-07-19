@@ -116,7 +116,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	profileName := strGetFirstOne(envProfile, *optProfile)
+	profileName := strGetFirstOne(*optProfile, envProfile)
 
 	var profile = &Profile{}
 	if profileName != "" {
@@ -127,12 +127,12 @@ func main() {
 		}
 	}
 
-	opts.token = strGetFirstOne(profile.Token, envToken, *optToken)
+	opts.token = strGetFirstOne(*optToken, envToken, profile.Token)
 	if opts.token == "" {
 		errText = append(errText, "error: slack token is required")
 	}
 
-	opts.postOpts.channel = strGetFirstOne(profile.Channel, *optChannel)
+	opts.postOpts.channel = strGetFirstOne(*optChannel, profile.Channel)
 	if opts.postOpts.channel == "" {
 		errText = append(errText, "error: channel is required")
 	}
