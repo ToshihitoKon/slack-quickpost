@@ -4,15 +4,25 @@ set -xeu
 binpath="/tmp/slack-quickpost-bin"
 go build -o $binpath ./...
 
-slackToken=$SLACK_QUICKPOST_TEST_TOKEN
-channelID=$SLACK_QUICKPOST_TEST_CHANNEL_ID
+testProfile=test-profile
+slackToken=$(yq '.token' ~/.config/slack-quickpost/${testProfile}.yaml)
+channelID=$(yq '.channel' ~/.config/slack-quickpost/${testProfile}.yaml)
 iconUrl="https://user-images.githubusercontent.com/10419053/132874304-3c6397b5-e084-4476-a376-e3c7a941039c.png"
 
 # print version
 $binpath --version
 
-# text / token given as option
 unset SLACK_TOKEN
+# token and channel given by Profile
+$binpath --profile ${testProfile} \
+    --text "case: token and channel given profile" \
+
+export SLACK_QUICKPOST_PROFILE=${testProfile}
+$binpath \
+    --text "case: token and channel given profile 2" \
+unset SLACK_QUICKPOST_PROFILE
+
+# text / token given as option
 $binpath --channel $channelID \
     --text "case: token given command option, username and icon not given" \
     --token="${slackToken}"
