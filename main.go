@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
+	"os/user"
+	"path"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
@@ -51,6 +54,15 @@ type PostOptions struct {
 	threadTs  string
 }
 
+func strGetFirstOne(vars ...string) string {
+	for _, v := range vars {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func main() {
 	var (
 		// mode: print version
@@ -65,15 +77,17 @@ func main() {
 		filepath = flag.String("file", "", "post file path")
 
 		// must options
-		envToken  = os.Getenv("SLACK_TOKEN")
-		optToken  = flag.String("token", "", "slack app OAuth token")
-		channelID = flag.String("channel", "", "post slack channel id")
+		envToken   = os.Getenv("SLACK_TOKEN")
+		optToken   = flag.String("token", "", "slack app OAuth token")
+		optChannel = flag.String("channel", "", "post slack channel id")
 
 		// optional
-		threadTs  = flag.String("thread-ts", "", "post under thread")
-		iconEmoji = flag.String("icon", "", "icon emoji")
-		iconUrl   = flag.String("icon-url", "", "icon image url")
-		username  = flag.String("username", "", "user name")
+		envProfile = os.Getenv("SLACK_QUICKPOST_PROFILE")
+		optProfile = flag.String("profile", "", "slack quickpost profile name")
+		threadTs   = flag.String("thread-ts", "", "post under thread")
+		iconEmoji  = flag.String("icon", "", "icon emoji")
+		iconUrl    = flag.String("icon-url", "", "icon image url")
+		username   = flag.String("username", "", "user name")
 
 		noFail = flag.Bool("nofail", false, "always return success code(0)")
 
@@ -91,25 +105,36 @@ func main() {
 		filepath:    *filepath,
 		postOpts: &PostOptions{
 			username:  *username,
-			channel:   *channelID,
 			iconEmoji: *iconEmoji,
 			iconUrl:   *iconUrl,
 			threadTs:  *threadTs,
 		},
 	}
-
-	// token
-	switch {
-	case *optToken != "":
-		opts.token = *optToken
-	case envToken != "":
-		opts.token = envToken
-	default:
-		errText = append(errText, "error: SLACK_TOKEN env or --token option is required")
+	usr, err := user.Current()
+	if err != nil {
+		log.Printf("error: user.Current(). %s", err)
+		os.Exit(1)
 	}
 
-	if *channelID == "" {
-		errText = append(errText, "error: --channel option is required")
+	profileName := strGetFirstOne(envProfile, *optProfile)
+
+	var profile = &Profile{}
+	if profileName != "" {
+		profPath := path.Join(usr.HomeDir, ".config", "slack-quickpost", profileName+".yaml")
+		profile, err = parseProfile(profPath)
+		if err != nil {
+			errText = append(errText, fmt.Sprintf("error: failed read profile %s. %s", profPath, err.Error()))
+		}
+	}
+
+	opts.token = strGetFirstOne(profile.Token, envToken, *optToken)
+	if opts.token == "" {
+		errText = append(errText, "error: slack token is required")
+	}
+
+	opts.postOpts.channel = strGetFirstOne(profile.Channel, *optChannel)
+	if opts.postOpts.channel == "" {
+		errText = append(errText, "error: channel is required")
 	}
 
 	// post mode

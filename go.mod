@@ -12,4 +12,5 @@ require (
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/stretchr/testify v1.4.0 // indirect
 	gopkg.in/yaml.v2 v2.2.4 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
