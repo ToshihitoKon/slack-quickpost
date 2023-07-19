@@ -3,7 +3,7 @@
 ## installation
 
 ```
-go get github.com/ToshihitoKon/slack-quickpost
+go install github.com/ToshihitoKon/slack-quickpost@latest
 ```
 
 ## setup
