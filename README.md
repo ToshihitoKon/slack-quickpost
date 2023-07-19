@@ -14,7 +14,9 @@ make Slack App and get OAuth token.
 
 ## usage
 
-OAuth token set environment variable or command option.
+OAuth token given by one of the following methods.
+
+#### environment variable
 
 ```
 export SLACK_TOKEN="xoxb-XXXXXXXX-XXXXXXX-XXXXXX"
@@ -23,13 +25,29 @@ slack-quickpost \
   --text [TEXT]
 ```
 
-OR
+#### Option
 
 ```
 slack-quickpost \
   --token xoxb-XXXXXXXX-XXXXXXX-XXXXXX \
   --channel [CHANNEL_ID] \
   --text [TEXT]
+```
+
+#### Config file
+
+Save config yaml `~/.config/slack-quickpost/profile-name.yaml
+
+```yaml
+token: xoxb-XXX
+channel: XXX
+```
+
+Provide the profile name using an environment variable(`SLACK_QUICKPOST_PROFILE`) or option.
+
+```
+SLACK_QUICKPOST_PROFILE=profile-name slack-quickpost --text [TEXT]
+slack-quickpost --profile profile-name --text [TEXT]
 ```
 
 ### post text
