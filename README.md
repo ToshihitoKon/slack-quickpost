@@ -36,7 +36,7 @@ slack-quickpost \
 
 #### Config file
 
-Save config yaml `~/.config/slack-quickpost/profile-name.yaml
+Save config yaml `~/.config/slack-quickpost/profile-name.yaml`
 
 ```yaml
 token: xoxb-XXX
