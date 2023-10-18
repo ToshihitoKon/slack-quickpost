@@ -11,5 +11,4 @@ jobs:
         with:
           version: 0.6.0
       - run: |
-        which slack-quickpost
-
+          which slack-quickpost
