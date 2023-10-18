@@ -1,0 +1,21 @@
+name: 'slack-quickpost'
+description: 'slack-quickpost'
+inputs:
+  version:
+    description: 'slack-quickpost version'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - id: install ToshihitoKon/slack-quickpost
+      shell: bash
+      run: |
+        tmpDir=$(mktemp -d)
+        cd ${tmpDir}
+        wget -O slack-quickpost.tar.gz https://github.com/ToshihitoKon/slack-quickpost/releases/download/v${{ inputs.version }}/slack-quickpost_linux_amd64.tar.gz
+        tar xf slack-quickpost.tar.gz
+        sudo install slack-quickpost /usr/local/bin/
+        rm -f slack-quickpost.tar.gz
+        cd
+        rm -rf ${tmpDir}
+

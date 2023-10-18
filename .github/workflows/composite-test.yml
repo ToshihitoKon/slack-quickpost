@@ -1,0 +1,15 @@
+name: release
+on:
+  pull_request:
+    branches:
+      - main
+jobs:
+  composite-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ToshihitoKon/slack-quickpost@v1
+        with:
+          version: 0.6.0
+      - run: |
+        which slack-quickpost
+
