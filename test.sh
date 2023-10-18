@@ -5,8 +5,8 @@ binpath="/tmp/slack-quickpost-bin"
 go build -o $binpath ./...
 
 testProfile=test-profile
-slackToken=$(yq '.token' ~/.config/slack-quickpost/${testProfile}.yaml)
-channelID=$(yq '.channel' ~/.config/slack-quickpost/${testProfile}.yaml)
+slackToken=$(yq -r '.token' ~/.config/slack-quickpost/${testProfile}.yaml)
+channelID=$(yq -r '.channel' ~/.config/slack-quickpost/${testProfile}.yaml)
 iconUrl="https://user-images.githubusercontent.com/10419053/132874304-3c6397b5-e084-4476-a376-e3c7a941039c.png"
 
 # print version
