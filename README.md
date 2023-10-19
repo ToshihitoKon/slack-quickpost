@@ -71,6 +71,11 @@ slack-quickpost \
   --channel [CANNEL_ID] \
   --text [TEXT] \
   --snippet
+
+# post BlockKit
+slack-quickpost \
+  --channel [CANNEL_ID] \
+  --block '{"type":"section","text":{"type":"mrkdwn","text":"*Sample BlockKit"}}'
 ```
 
 ### post file
@@ -84,14 +89,18 @@ slack-quickpost \
 ## comamnd options
 
 ```
---channel string    post slack channel id
---file string       post file path
---icon string       icon emoji
---icon-url string   icon image url
---snippet           post text as snippet
---text string       post text
---textfile string   post text file path
---token string      slack app OAuth token
---username string   user name
---version           print version
+--block string       post block json
+--channel string     post slack channel id
+--file string        post file path
+--icon string        icon emoji
+--icon-url string    icon image url
+--nofail             always return success code(0)
+--profile string     slack quickpost profile name
+--snippet            post text as snippet
+--text string        post text
+--textfile string    post text file path
+--thread-ts string   post under thread
+--token string       slack app OAuth token
+--username string    user name
+--version            print version
 ```
