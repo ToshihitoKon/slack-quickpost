@@ -69,3 +69,9 @@ $binpath --channel $channelID  \
     --username "ignored username" \
     --icon "cry" \
     --file /tmp/slack-quickpost-test.jpg
+
+# BlockKit json
+$binpath --channel $channelID  \
+    --username "BlockKit json" \
+    --icon "blush" \
+    --blocks '[{"type":"section","text":{"type":"mrkdwn","text":"*Post BlockKit*"}}]'
