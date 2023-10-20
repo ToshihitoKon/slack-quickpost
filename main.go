@@ -39,6 +39,7 @@ type Options struct {
 	token    string
 	text     string
 	filepath string
+	blocks   string
 
 	mode        string
 	snippetMode bool
@@ -75,6 +76,9 @@ func main() {
 
 		// mode: post file
 		filepath = flag.String("file", "", "post file path")
+
+		// mode: post blocks json
+		optBlocks = flag.String("blocks", "", "post BlockKit json")
 
 		// must options
 		envToken   = os.Getenv("SLACK_TOKEN")
@@ -142,6 +146,9 @@ func main() {
 	case *optText != "":
 		opts.text = strings.Replace(*optText, "\\n", "\n", -1)
 		opts.mode = "text"
+	case *optBlocks != "":
+		opts.blocks = *optBlocks
+		opts.mode = "blocks"
 	case *optTextFile != "":
 		bytes, err := ioutil.ReadFile(*optTextFile)
 		if err != nil {
@@ -212,6 +219,16 @@ func Do(opts *Options) (*CliOutput, error) {
 				return nil, errors.Wrap(err, "error: postMessage")
 			}
 		}
+	case "blocks":
+		blocks := slack.Blocks{}
+		if err := blocks.UnmarshalJSON([]byte(opts.blocks)); err != nil {
+			return nil, errors.Wrap(err, "error: failed blocks.UnmarshalJSON")
+		}
+		output, err = postBlocks(opts.slackClient, opts.postOpts, blocks)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error postBlocks %s", opts.filepath)
+		}
+
 	case "file":
 		if opts.filepath != "" {
 			file, err := os.Open(opts.filepath)
@@ -267,6 +284,26 @@ func postMessage(client SlackClient, postOpts *PostOptions, text string) (*CliOu
 		Timestamp: ts,
 	}
 
+	return output, nil
+}
+
+func postBlocks(client SlackClient, postOpts *PostOptions, blocks slack.Blocks) (*CliOutput, error) {
+	opts := []slack.MsgOption{}
+	opts = append(opts, postOpts.getMsgOptions()...)
+	opts = append(opts, slack.MsgOptionBlocks(blocks.BlockSet...))
+
+	postedChannel, ts, err := client.PostMessage(
+		postOpts.channel,
+		opts...,
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "error postMessage")
+	}
+
+	output := &CliOutput{
+		Channel:   postedChannel,
+		Timestamp: ts,
+	}
 	return output, nil
 }
 
