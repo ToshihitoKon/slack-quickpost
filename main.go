@@ -39,7 +39,7 @@ type Options struct {
 	token    string
 	text     string
 	filepath string
-	block    string
+	blocks   string
 
 	mode        string
 	snippetMode bool
@@ -77,8 +77,8 @@ func main() {
 		// mode: post file
 		filepath = flag.String("file", "", "post file path")
 
-		// mode: post block json
-		optBlock = flag.String("block", "", "post block json")
+		// mode: post blocks json
+		optBlocks = flag.String("blocks", "", "post BlockKit json")
 
 		// must options
 		envToken   = os.Getenv("SLACK_TOKEN")
@@ -146,9 +146,9 @@ func main() {
 	case *optText != "":
 		opts.text = strings.Replace(*optText, "\\n", "\n", -1)
 		opts.mode = "text"
-	case *optBlock != "":
-		opts.block = *optBlock
-		opts.mode = "block"
+	case *optBlocks != "":
+		opts.blocks = *optBlocks
+		opts.mode = "blocks"
 	case *optTextFile != "":
 		bytes, err := ioutil.ReadFile(*optTextFile)
 		if err != nil {
@@ -219,9 +219,9 @@ func Do(opts *Options) (*CliOutput, error) {
 				return nil, errors.Wrap(err, "error: postMessage")
 			}
 		}
-	case "block":
+	case "blocks":
 		blocks := slack.Blocks{}
-		if err := blocks.UnmarshalJSON([]byte(opts.block)); err != nil {
+		if err := blocks.UnmarshalJSON([]byte(opts.blocks)); err != nil {
 			return nil, errors.Wrap(err, "error: failed blocks.UnmarshalJSON")
 		}
 		output, err = postBlocks(opts.slackClient, opts.postOpts, blocks)

@@ -89,7 +89,7 @@ slack-quickpost \
 ## comamnd options
 
 ```
---block string       post block json
+--blocks string      post BlockKit json
 --channel string     post slack channel id
 --file string        post file path
 --icon string        icon emoji
