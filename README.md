@@ -12,6 +12,19 @@ https://api.slack.com/apps/
 
 make Slack App and get OAuth token.
 
+### GitHub Actions
+
+```yaml
+jobs:
+  using-slack-quikpost:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ToshihitoKon/slack-quickpost@v1
+        with:
+          version: 0.7.0
+
+```
+
 ## usage
 
 OAuth token given by one of the following methods.
