@@ -308,8 +308,9 @@ func postBlocks(client SlackClient, postOpts *PostOptions, blocks slack.Blocks) 
 }
 
 func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, filename, comment string) (*CliOutput, error) {
+	postTime := time.Now()
 	if filename == "" {
-		filename = fmt.Sprintf("%s.txt", time.Now().Format("20060102_150405"))
+		filename = fmt.Sprintf("%s.txt", postTime.Format("20060102_150405.999999"))
 	}
 	fups := slack.FileUploadParameters{
 		Filename:        filename,
