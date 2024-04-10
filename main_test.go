@@ -16,6 +16,7 @@ func TestDo(t *testing.T) {
 		text        string
 		mode        string
 		snippetMode bool
+		filepath    string
 		expect      expect
 	}{
 		{
@@ -48,18 +49,28 @@ func TestDo(t *testing.T) {
 				contentType: "file",
 			},
 		},
+		{
+			title:       "upload file",
+			snippetMode: true,
+			mode:        "file",
+			filepath:    "tests/upload.txt",
+			expect: expect{
+				success:     true,
+				contentType: "file",
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.title, func(t *testing.T) {
-			client := NewSlackClientMock()
+			client := NewSlackMockClient()
 			opts := &Options{
 				slackClient: client,
 				text:        tt.text,
 				mode:        tt.mode,
 
 				token:       "testtoken",
-				filepath:    "test filepath",
+				filepath:    tt.filepath,
 				snippetMode: tt.snippetMode,
 				postOpts: &PostOptions{
 					username:  "test username",
@@ -69,7 +80,7 @@ func TestDo(t *testing.T) {
 				},
 			}
 
-			err := Do(opts)
+			_, err := Do(opts)
 			if err != nil && tt.expect.success {
 				t.Errorf("error: Do %s", err.Error())
 			}

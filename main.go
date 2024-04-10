@@ -209,7 +209,7 @@ func Do(opts *Options) (*CliOutput, error) {
 		}
 
 		if opts.snippetMode {
-			output, err = postFile(opts.slackClient, opts.postOpts, strings.NewReader(opts.text), "", "")
+			output, err = postFile(opts.slackClient, opts.postOpts, strings.NewReader(opts.text), "", "", len(opts.text))
 			if err != nil {
 				return nil, errors.Wrap(err, "error postFile")
 			}
@@ -236,7 +236,11 @@ func Do(opts *Options) (*CliOutput, error) {
 				return nil, errors.Wrapf(err, "error open file: %s", opts.filepath)
 			}
 			filename := filepath.Base(opts.filepath)
-			output, err = postFile(opts.slackClient, opts.postOpts, file, filename, "")
+			st, err := os.Stat(opts.filepath)
+			if err != nil {
+				return nil, errors.Wrapf(err, "error stat file: %s", opts.filepath)
+			}
+			output, err = postFile(opts.slackClient, opts.postOpts, file, filename, "", int(st.Size()))
 			if err != nil {
 				return nil, errors.Wrapf(err, "error postFile %s", opts.filepath)
 			}
@@ -307,20 +311,20 @@ func postBlocks(client SlackClient, postOpts *PostOptions, blocks slack.Blocks) 
 	return output, nil
 }
 
-func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, filename, comment string) (*CliOutput, error) {
+func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, filename, comment string, size int) (*CliOutput, error) {
 	postTime := time.Now()
 	if filename == "" {
 		filename = fmt.Sprintf("%s.txt", postTime.Format("20060102_150405.999999"))
 	}
-	fups := slack.FileUploadParameters{
+	fups := slack.UploadFileV2Parameters{
 		Filename:        filename,
+		FileSize:        size,
 		Reader:          fileReader,
-		Filetype:        "auto",
 		InitialComment:  comment,
-		Channels:        []string{postOpts.channel},
+		Channel:         postOpts.channel,
 		ThreadTimestamp: postOpts.threadTs,
 	}
-	if _, err := client.UploadFile(fups); err != nil {
+	if _, err := client.UploadFileV2(fups); err != nil {
 		return nil, errors.Wrap(err, "error postFile")
 	}
 	output := &CliOutput{
