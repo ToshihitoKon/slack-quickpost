@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: ToshihitoKon/slack-quickpost@v1
         with:
-          version: 0.7.0
+          version: 0.8.0
 
 ```
 
