@@ -1,6 +1,7 @@
 module github.com/ToshihitoKon/slack-quickpost
 
 go 1.22
+toolchain go1.23.7
 
 require (
 	github.com/pkg/errors v0.9.1
@@ -12,6 +13,6 @@ require (
 require (
 	github.com/gorilla/websocket v1.5.1 // indirect
 	github.com/stretchr/testify v1.4.0 // indirect
-	golang.org/x/net v0.18.0 // indirect
+	golang.org/x/net v0.36.0 // indirect
 	gopkg.in/yaml.v2 v2.2.4 // indirect
 )
