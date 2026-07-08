@@ -19,6 +19,14 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
+// ビルド時に -ldflags "-X main.embeddedToken=... -X main.embeddedChannel=..." で
+// 値を焼き込むための変数。通常のビルドでは空文字のまま。
+// cmd/slack-quickpost-embed がこの変数へ値を注入する。
+var (
+	embeddedToken   string
+	embeddedChannel string
+)
+
 func version() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -131,12 +139,12 @@ func main() {
 		}
 	}
 
-	opts.token = strGetFirstOne(*optToken, envToken, profile.Token)
+	opts.token = strGetFirstOne(*optToken, envToken, profile.Token, embeddedToken)
 	if opts.token == "" {
 		errText = append(errText, "error: slack token is required")
 	}
 
-	opts.postOpts.channel = strGetFirstOne(*optChannel, profile.Channel)
+	opts.postOpts.channel = strGetFirstOne(*optChannel, profile.Channel, embeddedChannel)
 	if opts.postOpts.channel == "" {
 		errText = append(errText, "error: channel is required")
 	}
