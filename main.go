@@ -316,7 +316,7 @@ func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, f
 	if filename == "" {
 		filename = fmt.Sprintf("%s.txt", postTime.Format("20060102_150405.999999"))
 	}
-	fups := slack.UploadFileV2Parameters{
+	fups := slack.UploadFileParameters{
 		Filename:        filename,
 		FileSize:        size,
 		Reader:          fileReader,
@@ -324,7 +324,7 @@ func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, f
 		Channel:         postOpts.channel,
 		ThreadTimestamp: postOpts.threadTs,
 	}
-	if _, err := client.UploadFileV2(fups); err != nil {
+	if _, err := client.UploadFile(fups); err != nil {
 		return nil, errors.Wrap(err, "error postFile")
 	}
 	output := &CliOutput{

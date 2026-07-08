@@ -5,7 +5,7 @@ import (
 )
 
 type SlackClient interface {
-	UploadFileV2(slack.UploadFileV2Parameters) (*slack.FileSummary, error)
+	UploadFile(slack.UploadFileParameters) (*slack.FileSummary, error)
 	PostMessage(string, ...slack.MsgOption) (string, string, error)
 }
 
@@ -17,7 +17,7 @@ func NewSlackMockClient() *SlackMockClient {
 	return &SlackMockClient{}
 }
 
-func (smc *SlackMockClient) UploadFileV2(_ slack.UploadFileV2Parameters) (*slack.FileSummary, error) {
+func (smc *SlackMockClient) UploadFile(_ slack.UploadFileParameters) (*slack.FileSummary, error) {
 	smc.ContentType = "file"
 	// TODO
 	return nil, nil
