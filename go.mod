@@ -10,3 +10,6 @@ require (
 )
 
 require github.com/gorilla/websocket v1.5.3 // indirect
+
+// slack-quickpost-embed --source module fails outside a module directory.
+retract v0.9.0
