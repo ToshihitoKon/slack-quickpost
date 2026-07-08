@@ -63,6 +63,50 @@ SLACK_QUICKPOST_PROFILE=profile-name slack-quickpost --text [TEXT]
 slack-quickpost --profile profile-name --text [TEXT]
 ```
 
+#### Embedded binary
+
+Build a `slack-quickpost` binary with a token and default channel baked in, so
+that end users can run it without providing any credentials.
+
+Install the builder:
+
+```
+go install github.com/ToshihitoKon/slack-quickpost/cmd/slack-quickpost-embed@latest
+```
+
+Build a binary with values embedded:
+
+```
+# fetch the published module and embed values (default)
+slack-quickpost-embed \
+  --token xoxb-XXXXXXXX-XXXXXXX-XXXXXX \
+  --channel [CHANNEL_ID] \
+  --output ./slack-quickpost
+
+# token / channel can also come from environment variables
+SLACK_TOKEN=xoxb-XXX SLACK_CHANNEL=[CHANNEL_ID] slack-quickpost-embed --output ./slack-quickpost
+
+# pin the version to embed
+slack-quickpost-embed --token xoxb-XXX --channel [CHANNEL_ID] --version v0.8.1
+
+# build from the current source tree instead of the published module
+slack-quickpost-embed --token xoxb-XXX --channel [CHANNEL_ID] --source local
+```
+
+The resulting binary uses the embedded token / channel only as a fallback.
+Runtime inputs still take precedence in this order:
+`--token` / `--channel` option → `SLACK_TOKEN` env → profile → embedded value.
+
+Options:
+
+```
+--token string     slack app OAuth token to embed (fallback: SLACK_TOKEN)
+--channel string   default slack channel id to embed (fallback: SLACK_CHANNEL)
+--output string    output binary path (default "slack-quickpost")
+--source string    build source: "module" (fetch by version) or "local" (current directory) (default "module")
+--version string   slack-quickpost version to build when --source=module (default "latest")
+```
+
 ### post text
 
 ```

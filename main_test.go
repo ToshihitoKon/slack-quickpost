@@ -94,3 +94,25 @@ func TestDo(t *testing.T) {
 		})
 	}
 }
+
+// strGetFirstOne は先頭から最初の非空文字列を返す。焼き込み値(embeddedToken /
+// embeddedChannel)を末尾フォールバックとして使う優先順位の仕様を固定する。
+func Test_strGetFirstOne_returnsFirstNonEmpty(t *testing.T) {
+	tests := []struct {
+		title string
+		vars  []string
+		want  string
+	}{
+		{"実行時指定が焼き込み値より優先", []string{"runtime", "", "embedded"}, "runtime"},
+		{"先行が空なら次を採用", []string{"", "profile", "embedded"}, "profile"},
+		{"全て空なら空文字", []string{"", "", ""}, ""},
+		{"焼き込み値のみのフォールバック", []string{"", "", "embedded"}, "embedded"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.title, func(t *testing.T) {
+			if got := strGetFirstOne(tt.vars...); got != tt.want {
+				t.Errorf("strGetFirstOne(%v) = %q, want %q", tt.vars, got, tt.want)
+			}
+		})
+	}
+}
