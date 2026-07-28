@@ -91,6 +91,19 @@ slack-quickpost-embed --token xoxb-XXX --channel [CHANNEL_ID] --version v0.8.1
 
 # build from the current source tree instead of the published module
 slack-quickpost-embed --token xoxb-XXX --channel [CHANNEL_ID] --source local
+
+# cross compile for linux/arm64
+slack-quickpost-embed \
+  --token xoxb-XXX --channel [CHANNEL_ID] \
+  --goos linux --goarch arm64 \
+  --output ./slack-quickpost-linux-arm64
+
+# cross compile for windows/amd64 (".exe" is appended automatically)
+slack-quickpost-embed \
+  --token xoxb-XXX --channel [CHANNEL_ID] \
+  --goos windows --goarch amd64 \
+  --output ./slack-quickpost
+# -> ./slack-quickpost.exe
 ```
 
 The resulting binary uses the embedded token / channel only as a fallback.
@@ -105,6 +118,8 @@ Options:
 --output string    output binary path (default "slack-quickpost")
 --source string    build source: "module" (fetch by version) or "local" (current directory) (default "module")
 --version string   slack-quickpost version to build when --source=module (default "latest")
+--goos string      target GOOS for cross compilation (default: host GOOS)
+--goarch string    target GOARCH for cross compilation (default: host GOARCH)
 ```
 
 ### post text
