@@ -9,6 +9,7 @@ builds:
     binary: slack-quickpost
     env:
       - CGO_ENABLED=0
+    trimpath: true
     goos:
       - linux
       - windows

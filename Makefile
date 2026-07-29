@@ -2,7 +2,7 @@ help:
 	cat Makefile | grep '^\w'
 
 build:
-	go build -o bin/slack-quickpost ./...
+	go build -ldflags="-s -w" -o bin/slack-quickpost .
 
 run:
-	go run ./...
+	go run .

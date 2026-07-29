@@ -69,7 +69,7 @@ func run() error {
 		output += ".exe"
 	}
 
-	ldflags := fmt.Sprintf("-X %s=%s -X %s=%s", tokenVar, token, channelVar, channel)
+	ldflags := fmt.Sprintf("-s -w -X %s=%s -X %s=%s", tokenVar, token, channelVar, channel)
 
 	switch *optSource {
 	case "module":
@@ -117,7 +117,7 @@ func buildModule(version, ldflags, goos, goarch, output string) error {
 		return fmt.Errorf("go get failed: %w", err)
 	}
 
-	buildCmd := exec.Command("go", "build", "-o", output, "-ldflags", ldflags, modulePath)
+	buildCmd := exec.Command("go", "build", "-trimpath", "-o", output, "-ldflags", ldflags, modulePath)
 	buildCmd.Dir = tmpdir
 	buildCmd.Stdout = os.Stdout
 	buildCmd.Stderr = os.Stderr
@@ -131,7 +131,7 @@ func buildModule(version, ldflags, goos, goarch, output string) error {
 // buildLocal はカレントの slack-quickpost ソースを焼き込みビルドする。
 // go.mod のあるチェックアウト内で実行される前提。
 func buildLocal(ldflags, goos, goarch, output string) error {
-	cmd := exec.Command("go", "build", "-o", output, "-ldflags", ldflags, ".")
+	cmd := exec.Command("go", "build", "-trimpath", "-o", output, "-ldflags", ldflags, ".")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch)
