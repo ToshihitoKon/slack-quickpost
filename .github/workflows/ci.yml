@@ -1,0 +1,51 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ["1.22", "stable"]
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.go-version == 'stable' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+      - run: go build -o bin/slack-quickpost .
+      - run: go vet ./...
+      - run: go test ./...
+
+  embed-binary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: build embed tool
+        run: go build -o bin/slack-quickpost-embed ./cmd/slack-quickpost-embed
+      - name: embed build (host platform, executable check)
+        run: |
+          ./bin/slack-quickpost-embed \
+            --token dummy-token --channel dummy-channel \
+            --source local --output ./dist/slack-quickpost-native
+          ./dist/slack-quickpost-native --help
+      - name: embed build (cross compilation matrix)
+        run: |
+          set -eu
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            ./bin/slack-quickpost-embed \
+              --token dummy-token --channel dummy-channel \
+              --source local --goos "$goos" --goarch "$goarch" \
+              --output "./dist/slack-quickpost-${goos}-${goarch}"
+          done
+          ls -la ./dist
