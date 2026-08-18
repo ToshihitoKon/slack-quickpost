@@ -158,6 +158,50 @@ slack-quickpost \
   --file [FILE_PATH]
 ```
 
+## output
+
+stdout always prints exactly one line of `CliOutput` JSON, followed by a
+trailing newline.
+
+On success:
+
+```json
+{"channel":"C123","timestamp":"1234567890.123456"}
+```
+
+The `timestamp` key is omitted when it is not available (e.g. `--file` /
+snippet uploads, since the Slack API used for file uploads does not return a
+message timestamp).
+
+On failure, only the `error` key is present, regardless of `--nofail`:
+
+```json
+{"error":"slack token is required"}
+```
+
+`--nofail` only changes the exit code (`1` → `0` on failure); it never
+changes what is printed to stdout. Human-readable diagnostics (e.g. the
+`[INFO]` notice printed when text is auto-uploaded as a snippet for
+exceeding 3000 characters) go to stderr, never stdout.
+
+Two exceptions to "stdout is JSON-only":
+- `--version` prints a plain version string to stdout.
+- An unknown flag prints pflag's usage text to stderr and exits with code
+  `2`; nothing is printed to stdout, and `--nofail` has no effect on this
+  exit code.
+
+### Breaking changes in v1.0
+
+- stdout previously mixed plain-text error messages and an `[INFO]` log
+  line with the `CliOutput` JSON. It is now JSON-only; those messages moved
+  to stderr and error messages are now conveyed via the `error` key above.
+- Success output previously had no trailing newline; it now does.
+- `timestamp` previously appeared as `"timestamp":""` when unavailable; the
+  key is now omitted entirely.
+- `--file` upload output still reflects the requested channel value, not a
+  value echoed back from the Slack API — the upload API response does not
+  include one.
+
 ## comamnd options
 
 ```

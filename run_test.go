@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func Test_runWith_postText(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	want := `{"channel":"C123","timestamp":"1234567890.123456"}`
+	want := "{\"channel\":\"C123\",\"timestamp\":\"1234567890.123456\"}\n"
 	if stdout != want {
 		t.Errorf("stdout = %q, want %q", stdout, want)
 	}
@@ -38,15 +39,19 @@ func Test_runWith_postText_autoSnippetOverLimit(t *testing.T) {
 
 	longText := strings.Repeat("a", 3001)
 	args := []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--text", longText}
-	code, stdout, _ := runWithMock(args)
+	code, stdout, stderr := runWithMock(args)
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	want := "[INFO] text length exceed limits (3000 characters), upload snippets.\n" +
-		`{"channel":"C123","timestamp":""}`
-	if stdout != want {
-		t.Errorf("stdout = %q, want %q", stdout, want)
+	// postFileはtimestampを取得できないため、omitemptyによりtimestampキー自体が省略される。
+	wantStdout := "{\"channel\":\"C123\"}\n"
+	if stdout != wantStdout {
+		t.Errorf("stdout = %q, want %q", stdout, wantStdout)
+	}
+	wantStderr := "[INFO] text length exceed limits (3000 characters), upload snippets.\n"
+	if stderr != wantStderr {
+		t.Errorf("stderr = %q, want %q", stderr, wantStderr)
 	}
 }
 
@@ -60,7 +65,7 @@ func Test_runWith_postText_explicitSnippet(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	want := `{"channel":"C123","timestamp":""}`
+	want := "{\"channel\":\"C123\"}\n"
 	if stdout != want {
 		t.Errorf("stdout = %q, want %q", stdout, want)
 	}
@@ -85,7 +90,7 @@ func Test_runWith_postTextFile(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	want := `{"channel":"C123","timestamp":"1234567890.123456"}`
+	want := "{\"channel\":\"C123\",\"timestamp\":\"1234567890.123456\"}\n"
 	if stdout != want {
 		t.Errorf("stdout = %q, want %q", stdout, want)
 	}
@@ -103,7 +108,7 @@ func Test_runWith_postBlocks(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	want := `{"channel":"C123","timestamp":"1234567890.123456"}`
+	want := "{\"channel\":\"C123\",\"timestamp\":\"1234567890.123456\"}\n"
 	if stdout != want {
 		t.Errorf("stdout = %q, want %q", stdout, want)
 	}
@@ -119,7 +124,7 @@ func Test_runWith_postFile(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	want := `{"channel":"C123","timestamp":""}`
+	want := "{\"channel\":\"C123\"}\n"
 	if stdout != want {
 		t.Errorf("stdout = %q, want %q", stdout, want)
 	}
@@ -134,32 +139,32 @@ func Test_runWith_errorCases(t *testing.T) {
 		{
 			title:      "token missing",
 			args:       []string{"slack-quickpost", "--channel", "C123", "--text", "hello"},
-			wantSubstr: "error: slack token is required",
+			wantSubstr: "slack token is required",
 		},
 		{
 			title:      "channel missing",
 			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--text", "hello"},
-			wantSubstr: "error: channel is required",
+			wantSubstr: "channel is required",
 		},
 		{
 			title:      "no mode specified",
 			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123"},
-			wantSubstr: "error: --text option is required",
+			wantSubstr: "--text option is required",
 		},
 		{
 			title:      "invalid blocks json",
 			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--blocks", "{not json"},
-			wantSubstr: "error: failed blocks.UnmarshalJSON",
+			wantSubstr: "failed to parse blocks json",
 		},
 		{
 			title:      "textfile not found",
 			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--textfile", "tests/not-exist.txt"},
-			wantSubstr: "error: failed read text file",
+			wantSubstr: "failed read text file",
 		},
 		{
 			title:      "file not found",
 			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--file", "tests/not-exist.txt"},
-			wantSubstr: "error open file",
+			wantSubstr: "failed to open file",
 		},
 	}
 
@@ -168,12 +173,13 @@ func Test_runWith_errorCases(t *testing.T) {
 			t.Setenv("SLACK_TOKEN", "")
 			t.Setenv("SLACK_QUICKPOST_PROFILE", "")
 
-			code, stdout, _ := runWithMock(tt.args)
+			code, stdout, stderr := runWithMock(tt.args)
 			if code != 1 {
 				t.Errorf("exit code = %d, want 1", code)
 			}
-			if !strings.Contains(stdout, tt.wantSubstr) {
-				t.Errorf("stdout = %q, want to contain %q", stdout, tt.wantSubstr)
+			assertStdoutIsErrorJSON(t, stdout, tt.wantSubstr)
+			if stderr != "" {
+				t.Errorf("stderr = %q, want empty", stderr)
 			}
 		})
 
@@ -182,14 +188,41 @@ func Test_runWith_errorCases(t *testing.T) {
 			t.Setenv("SLACK_QUICKPOST_PROFILE", "")
 
 			args := append(append([]string{}, tt.args...), "--nofail")
-			code, stdout, _ := runWithMock(args)
+			code, stdout, stderr := runWithMock(args)
 			if code != 0 {
 				t.Errorf("exit code = %d, want 0", code)
 			}
-			if !strings.Contains(stdout, tt.wantSubstr) {
-				t.Errorf("stdout = %q, want to contain %q", stdout, tt.wantSubstr)
+			assertStdoutIsErrorJSON(t, stdout, tt.wantSubstr)
+			if stderr != "" {
+				t.Errorf("stderr = %q, want empty", stderr)
 			}
 		})
+	}
+}
+
+// assertStdoutIsErrorJSON はstdoutが「errorキーのみを持つJSON1行+改行」であり、
+// そのerror文言がwantSubstrを含むことを検証する。ファイルパスやOS/Slackのエラー文言が
+// 埋め込まれるケースがあるため、完全一致ではなく部分一致で照合する。
+func assertStdoutIsErrorJSON(t *testing.T, stdout, wantSubstr string) {
+	t.Helper()
+
+	if !strings.HasSuffix(stdout, "\n") {
+		t.Fatalf("stdout = %q, want to end with newline", stdout)
+	}
+	lines := strings.Split(strings.TrimRight(stdout, "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("stdout = %q, want exactly one line", stdout)
+	}
+
+	var got CliOutput
+	if err := json.Unmarshal([]byte(lines[0]), &got); err != nil {
+		t.Fatalf("stdout line is not valid JSON: %q: %s", lines[0], err)
+	}
+	if got.Channel != "" || got.Timestamp != "" {
+		t.Errorf("stdout = %q, want channel/timestamp to be empty on error", stdout)
+	}
+	if !strings.Contains(got.Error, wantSubstr) {
+		t.Errorf("error = %q, want to contain %q", got.Error, wantSubstr)
 	}
 }
 
