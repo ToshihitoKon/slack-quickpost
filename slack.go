@@ -9,22 +9,27 @@ type SlackClient interface {
 	PostMessage(string, ...slack.MsgOption) (string, string, error)
 }
 
+const mockPostMessageTimestamp = "1234567890.123456"
+
 type SlackMockClient struct {
 	ContentType string
+
+	UploadFileCalls  []slack.UploadFileParameters
+	PostMessageCalls []string
 }
 
 func NewSlackMockClient() *SlackMockClient {
 	return &SlackMockClient{}
 }
 
-func (smc *SlackMockClient) UploadFile(_ slack.UploadFileParameters) (*slack.FileSummary, error) {
+func (smc *SlackMockClient) UploadFile(params slack.UploadFileParameters) (*slack.FileSummary, error) {
 	smc.ContentType = "file"
-	// TODO
+	smc.UploadFileCalls = append(smc.UploadFileCalls, params)
 	return nil, nil
 }
 
-func (smc *SlackMockClient) PostMessage(_ string, opts ...slack.MsgOption) (string, string, error) {
+func (smc *SlackMockClient) PostMessage(channel string, opts ...slack.MsgOption) (string, string, error) {
 	smc.ContentType = "message"
-	// TODO
-	return "", "", nil
+	smc.PostMessageCalls = append(smc.PostMessageCalls, channel)
+	return channel, mockPostMessageTimestamp, nil
 }
