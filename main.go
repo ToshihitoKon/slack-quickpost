@@ -215,8 +215,9 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		return writeError(stdout, err.Error(), *noFail)
 	}
 
+	// 投稿は完了しているため、書き込み失敗で失敗のexit codeを返すとリトライ時に二重投稿になる
 	if err := json.NewEncoder(stdout).Encode(output); err != nil {
-		return writeError(stdout, err.Error(), *noFail)
+		fmt.Fprintf(stderr, "failed to write output: %s\n", err)
 	}
 	return 0
 }

@@ -130,6 +130,34 @@ func Test_runWith_postFile(t *testing.T) {
 	}
 }
 
+type closedWriter struct{}
+
+func (closedWriter) Write(p []byte) (int, error) {
+	return 0, os.ErrClosed
+}
+
+func Test_runWith_stdoutWriteFailureAfterPost(t *testing.T) {
+	t.Setenv("SLACK_TOKEN", "")
+	t.Setenv("SLACK_QUICKPOST_PROFILE", "")
+
+	mock := NewSlackMockClient()
+	var errBuf bytes.Buffer
+	args := []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--text", "hello"}
+	code := runWith(args, closedWriter{}, &errBuf, func(token string) SlackClient {
+		return mock
+	})
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if len(mock.PostMessageCalls) != 1 {
+		t.Errorf("PostMessage calls = %d, want 1", len(mock.PostMessageCalls))
+	}
+	if !strings.Contains(errBuf.String(), "failed to write output") {
+		t.Errorf("stderr = %q, want to contain \"failed to write output\"", errBuf.String())
+	}
+}
+
 func Test_runWith_errorCases(t *testing.T) {
 	tests := []struct {
 		title      string
