@@ -126,7 +126,7 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		iconUrl    = fs.String("icon-url", "", "icon image url")
 		username   = fs.String("username", "", "user name")
 
-		noFail = fs.Bool("nofail", false, "always return success code(0)")
+		noFail = fs.Bool("nofail", false, "exit with code 0 even on failure (except flag parse errors)")
 
 		errText []string
 	)

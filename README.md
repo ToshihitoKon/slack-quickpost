@@ -188,11 +188,14 @@ changes what is printed to stdout. Human-readable diagnostics (e.g. the
 `[INFO]` notice printed when text is auto-uploaded as a snippet for
 exceeding 3000 bytes) go to stderr, never stdout.
 
-Two exceptions to "stdout is JSON-only":
+Exceptions to "stdout is JSON-only":
 - `--version` prints a plain version string to stdout.
-- An unknown flag prints pflag's usage text to stderr and exits with code
-  `2`; nothing is printed to stdout, and `--nofail` has no effect on this
-  exit code.
+- `--help` / `-h` prints the usage text to stderr and exits with code `0`;
+  nothing is printed to stdout.
+- A flag parse error (an unknown flag, a flag missing its value, an invalid
+  boolean value, etc.) prints pflag's usage text to stderr and exits with
+  code `2`; nothing is printed to stdout, and `--nofail` has no effect on
+  this exit code.
 
 See [CHANGES.md](CHANGES.md) for breaking changes in v1.0.
 
@@ -204,7 +207,7 @@ See [CHANGES.md](CHANGES.md) for breaking changes in v1.0.
 --file string        post file path
 --icon string        icon emoji
 --icon-url string    icon image url
---nofail             always return success code(0)
+--nofail             exit with code 0 even on failure (except flag parse errors)
 --profile string     slack quickpost profile name
 --snippet            post text as snippet
 --text string        post text
