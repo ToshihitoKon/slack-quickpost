@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"os/user"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -53,7 +55,8 @@ type Options struct {
 	mode        string
 	snippetMode bool
 
-	postOpts *PostOptions
+	postOpts     *PostOptions
+	deleteTarget MessageRef
 }
 
 type PostOptions struct {
@@ -62,6 +65,67 @@ type PostOptions struct {
 	iconEmoji string
 	iconUrl   string
 	threadTs  string
+}
+
+type MessageRef struct {
+	channel   string
+	timestamp string
+}
+
+// permalink の p 以降はメッセージの ts から "." を除いた数字列で、末尾 6 桁が小数部にあたる。
+var permalinkPathPattern = regexp.MustCompile(`^/archives/([A-Z0-9]+)/p(\d+)(\d{6})$`)
+
+const permalinkFormat = "https://<workspace>.slack.com/archives/<channel>/p<timestamp>"
+
+// parseMessageURL は Slack の「リンクをコピー」で得られる permalink から channel と ts を取り出す。
+// スレッド返信の permalink に付く thread_ts クエリは親の ts なので使わない。
+// 削除対象は channel と ts だけで決まるため、ホスト部は検証しない。
+func parseMessageURL(rawURL string) (MessageRef, error) {
+	var m []string
+	if u, err := url.Parse(rawURL); err == nil {
+		m = permalinkPathPattern.FindStringSubmatch(u.Path)
+	}
+	if m == nil {
+		return MessageRef{}, errors.Errorf("invalid message url (want a permalink like %s): %s", permalinkFormat, rawURL)
+	}
+	return MessageRef{
+		channel:   m[1],
+		timestamp: m[2] + "." + m[3],
+	}, nil
+}
+
+// --delete はこれら以外のフラグと排他。後から追加されるフラグも既定で排他になるよう許可リストで持つ。
+var deleteCompatibleFlags = map[string]bool{
+	"delete":  true,
+	"token":   true,
+	"profile": true,
+	"nofail":  true,
+}
+
+// pflag の String は重複指定を黙って後勝ちにし、StringArray は --help の型表示が stringArray になって
+// 複数指定できるように見えるため、自前で指定回数を数える
+type countingStringValue struct {
+	value string
+	count int
+}
+
+func (v *countingStringValue) Set(s string) error {
+	v.value = s
+	v.count++
+	return nil
+}
+
+func (v *countingStringValue) String() string { return v.value }
+func (v *countingStringValue) Type() string   { return "string" }
+
+func flagsConflictingWithDelete(fs *flag.FlagSet) []string {
+	var names []string
+	fs.Visit(func(f *flag.Flag) {
+		if !deleteCompatibleFlags[f.Name] {
+			names = append(names, "--"+f.Name)
+		}
+	})
+	return names
 }
 
 func strGetFirstOne(vars ...string) string {
@@ -113,6 +177,9 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		// mode: post blocks json
 		optBlocks = fs.String("blocks", "", "post BlockKit json")
 
+		// mode: delete message
+		optDelete = &countingStringValue{}
+
 		// must options
 		envToken   = os.Getenv("SLACK_TOKEN")
 		optToken   = fs.String("token", "", "slack app OAuth token")
@@ -130,6 +197,8 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 
 		errText []string
 	)
+	fs.Var(optDelete, "delete", "delete message by permalink url")
+
 	if err := fs.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -177,31 +246,50 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		errText = append(errText, "slack token is required")
 	}
 
-	opts.postOpts.channel = strGetFirstOne(*optChannel, profile.Channel, embeddedChannel)
-	if opts.postOpts.channel == "" {
-		errText = append(errText, "channel is required")
-	}
-
-	// post mode
-	switch {
-	case *optText != "":
-		opts.text = strings.Replace(*optText, "\\n", "\n", -1)
-		opts.mode = "text"
-	case *optBlocks != "":
-		opts.blocks = *optBlocks
-		opts.mode = "blocks"
-	case *optTextFile != "":
-		bytes, err := ioutil.ReadFile(*optTextFile)
-		if err != nil {
-			errText = append(errText, fmt.Sprintf("failed read text file: %s", err))
+	// delete mode は channel を URL から取るため、profile や焼き込みの channel は使わない
+	if 0 < optDelete.count {
+		opts.mode = "delete"
+		if conflicting := flagsConflictingWithDelete(fs); 0 < len(conflicting) {
+			errText = append(errText, fmt.Sprintf("--delete cannot be used with %s", strings.Join(conflicting, ", ")))
 		}
-		opts.text = string(bytes)
-		opts.mode = "text"
-	case *filepath != "":
-		opts.filepath = *filepath
-		opts.mode = "file"
-	default:
-		errText = append(errText, "--text option is required")
+		if 1 < optDelete.count {
+			errText = append(errText, "--delete can be specified only once")
+		}
+		if 0 < fs.NArg() {
+			errText = append(errText, fmt.Sprintf("--delete takes exactly one url, got extra arguments: %s", strings.Join(fs.Args(), " ")))
+		}
+		target, err := parseMessageURL(optDelete.value)
+		if err != nil {
+			errText = append(errText, err.Error())
+		}
+		opts.deleteTarget = target
+	} else {
+		opts.postOpts.channel = strGetFirstOne(*optChannel, profile.Channel, embeddedChannel)
+		if opts.postOpts.channel == "" {
+			errText = append(errText, "channel is required")
+		}
+
+		// post mode
+		switch {
+		case *optText != "":
+			opts.text = strings.Replace(*optText, "\\n", "\n", -1)
+			opts.mode = "text"
+		case *optBlocks != "":
+			opts.blocks = *optBlocks
+			opts.mode = "blocks"
+		case *optTextFile != "":
+			bytes, err := ioutil.ReadFile(*optTextFile)
+			if err != nil {
+				errText = append(errText, fmt.Sprintf("failed read text file: %s", err))
+			}
+			opts.text = string(bytes)
+			opts.mode = "text"
+		case *filepath != "":
+			opts.filepath = *filepath
+			opts.mode = "file"
+		default:
+			errText = append(errText, "--text option is required")
+		}
 	}
 
 	if 0 < len(errText) {
@@ -215,7 +303,7 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		return writeError(stdout, err.Error(), *noFail)
 	}
 
-	// 投稿は完了しているため、書き込み失敗で失敗のexit codeを返すとリトライ時に二重投稿になる
+	// 投稿・削除は完了しているため、書き込み失敗で失敗のexit codeを返すと、リトライ時に二重投稿や削除済みメッセージへの削除エラーになる
 	if err := json.NewEncoder(stdout).Encode(output); err != nil {
 		fmt.Fprintf(stderr, "failed to write output: %s\n", err)
 	}
@@ -276,6 +364,12 @@ func Do(opts *Options) (*CliOutput, error) {
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to upload file: %s", opts.filepath)
 			}
+		}
+
+	case "delete":
+		output, err = deleteMessage(opts.slackClient, opts.deleteTarget)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to delete message")
 		}
 	}
 
@@ -364,6 +458,19 @@ func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, f
 		// リクエスト時点のchannelをそのまま使う
 		Channel: postOpts.channel,
 		// Timestamp: UploadFileはtimestampを取得できない
+	}
+	return output, nil
+}
+
+func deleteMessage(client SlackClient, target MessageRef) (*CliOutput, error) {
+	deletedChannel, ts, err := client.DeleteMessage(target.channel, target.timestamp)
+	if err != nil {
+		return nil, err
+	}
+
+	output := &CliOutput{
+		Channel:   deletedChannel,
+		Timestamp: ts,
 	}
 	return output, nil
 }

@@ -158,6 +158,34 @@ slack-quickpost \
   --file [FILE_PATH]
 ```
 
+### delete message
+
+Pass a message permalink (the URL from "Copy link" in Slack). The channel and
+timestamp are taken from the URL. Quote the URL: permalinks of thread replies
+contain `?` and `&`.
+
+```
+slack-quickpost \
+  --delete 'https://[WORKSPACE].slack.com/archives/[CHANNEL_ID]/p[TIMESTAMP]'
+```
+
+- `--delete` can only be combined with `--token`, `--profile` and `--nofail`.
+  Any other option (including `--channel`), a second `--delete` or an extra
+  positional argument is an error. `SLACK_TOKEN` / `SLACK_QUICKPOST_PROFILE`
+  work as usual.
+- `--version` and `--help` still take precedence and exit without deleting
+  anything.
+- The default channel from a profile or an embedded binary is ignored.
+- The output has the same shape as a post, with the deleted message's
+  `channel` and `timestamp`.
+- With a bot token, Slack only allows deleting messages posted by that bot
+  (`chat.delete` API restriction).
+- File and snippet posts (including auto-snippets over 3000 bytes) cannot be
+  deleted: Slack gives them only a file link (`/files/...`), not a message
+  permalink.
+- Embedded binaries can use `--delete` too, so anyone who has the binary can
+  delete whatever its embedded token is allowed to delete.
+
 ## output
 
 stdout always prints exactly one line of `CliOutput` JSON, followed by a
@@ -204,6 +232,7 @@ See [CHANGES.md](CHANGES.md) for breaking changes in v1.0.
 ```
 --blocks string      post BlockKit json
 --channel string     post slack channel id
+--delete string      delete message by permalink url
 --file string        post file path
 --icon string        icon emoji
 --icon-url string    icon image url

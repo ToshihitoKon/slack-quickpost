@@ -3,15 +3,20 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
 )
 
 func runWithMock(args []string) (exitCode int, stdout, stderr string) {
+	return runWithClient(args, NewSlackMockClient())
+}
+
+func runWithClient(args []string, client *SlackMockClient) (exitCode int, stdout, stderr string) {
 	var outBuf, errBuf bytes.Buffer
 	newClient := func(token string) SlackClient {
-		return NewSlackMockClient()
+		return client
 	}
 	exitCode = runWith(args, &outBuf, &errBuf, newClient)
 	return exitCode, outBuf.String(), errBuf.String()
@@ -158,6 +163,144 @@ func Test_runWith_stdoutWriteFailureAfterPost(t *testing.T) {
 	}
 }
 
+func Test_runWith_stdoutWriteFailureAfterDelete(t *testing.T) {
+	t.Setenv("SLACK_TOKEN", "")
+	t.Setenv("SLACK_QUICKPOST_PROFILE", "")
+
+	mock := NewSlackMockClient()
+	var errBuf bytes.Buffer
+	args := []string{"slack-quickpost", "--token", "xoxb-test", "--delete", "https://example.slack.com/archives/C123/p1700000000000200"}
+	code := runWith(args, closedWriter{}, &errBuf, func(token string) SlackClient {
+		return mock
+	})
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if len(mock.DeleteMessageCalls) != 1 {
+		t.Errorf("DeleteMessage calls = %d, want 1", len(mock.DeleteMessageCalls))
+	}
+	if !strings.Contains(errBuf.String(), "failed to write output") {
+		t.Errorf("stderr = %q, want to contain \"failed to write output\"", errBuf.String())
+	}
+}
+
+// 削除対象の ts は mockPostMessageTimestamp と別の値にし、誤って PostMessage が呼ばれた場合と区別できるようにする
+func Test_runWith_deleteMessage(t *testing.T) {
+	tests := []struct {
+		title      string
+		url        string
+		extraArgs  []string
+		wantTarget MessageRef
+	}{
+		{"permalink", "https://example.slack.com/archives/C123/p1700000000000200", nil, MessageRef{channel: "C123", timestamp: "1700000000.000200"}},
+		// スレッド返信の permalink。thread_ts は親の ts なので、削除対象は p 以降の ts になる
+		{"thread reply permalink", "https://example.slack.com/archives/C123/p1700000000000200?thread_ts=1700000000.000100&cid=C123", nil, MessageRef{channel: "C123", timestamp: "1700000000.000200"}},
+		{"with nofail", "https://example.slack.com/archives/C123/p1700000000000200", []string{"--nofail"}, MessageRef{channel: "C123", timestamp: "1700000000.000200"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.title, func(t *testing.T) {
+			t.Setenv("SLACK_TOKEN", "")
+			t.Setenv("SLACK_QUICKPOST_PROFILE", "")
+
+			client := NewSlackMockClient()
+			args := append([]string{"slack-quickpost", "--token", "xoxb-test", "--delete", tt.url}, tt.extraArgs...)
+			code, stdout, _ := runWithClient(args, client)
+
+			if code != 0 {
+				t.Fatalf("exit code = %d, want 0", code)
+			}
+			if len(client.DeleteMessageCalls) != 1 || client.DeleteMessageCalls[0] != tt.wantTarget {
+				t.Errorf("DeleteMessage calls = %+v, want [%+v]", client.DeleteMessageCalls, tt.wantTarget)
+			}
+			if len(client.PostMessageCalls) != 0 || len(client.UploadFileCalls) != 0 {
+				t.Errorf("unexpected post calls: PostMessage=%v UploadFile=%d", client.PostMessageCalls, len(client.UploadFileCalls))
+			}
+			want := "{\"channel\":\"C123\",\"timestamp\":\"1700000000.000200\"}\n"
+			if stdout != want {
+				t.Errorf("stdout = %q, want %q", stdout, want)
+			}
+		})
+	}
+}
+
+func Test_runWith_deleteMessage_ignoresDefaultChannel(t *testing.T) {
+	t.Setenv("SLACK_TOKEN", "")
+	t.Setenv("SLACK_QUICKPOST_PROFILE", "")
+	original := embeddedChannel
+	embeddedChannel = "CDEFAULT"
+	t.Cleanup(func() { embeddedChannel = original })
+
+	client := NewSlackMockClient()
+	args := []string{"slack-quickpost", "--token", "xoxb-test", "--delete", "https://example.slack.com/archives/C123/p1700000000000200"}
+	code, _, _ := runWithClient(args, client)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	want := MessageRef{channel: "C123", timestamp: "1700000000.000200"}
+	if len(client.DeleteMessageCalls) != 1 || client.DeleteMessageCalls[0] != want {
+		t.Errorf("DeleteMessage calls = %+v, want [%+v]", client.DeleteMessageCalls, want)
+	}
+}
+
+func Test_runWith_deleteMessage_rejectedInput_doesNotDelete(t *testing.T) {
+	url := "https://example.slack.com/archives/C123/p1700000000000200"
+	tests := []struct {
+		title    string
+		args     []string
+		wantCode int
+	}{
+		{"version takes precedence", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--version"}, 0},
+		{"help takes precedence", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--help"}, 0},
+		{"conflicting option", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--text", "hello"}, 1},
+		{"extra url", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, url}, 1},
+		{"repeated delete", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--delete", url}, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.title, func(t *testing.T) {
+			t.Setenv("SLACK_TOKEN", "")
+			t.Setenv("SLACK_QUICKPOST_PROFILE", "")
+
+			client := NewSlackMockClient()
+			code, _, _ := runWithClient(tt.args, client)
+
+			if code != tt.wantCode {
+				t.Errorf("exit code = %d, want %d", code, tt.wantCode)
+			}
+			if len(client.DeleteMessageCalls) != 0 {
+				t.Errorf("DeleteMessage calls = %+v, want none", client.DeleteMessageCalls)
+			}
+		})
+	}
+}
+
+func Test_runWith_deleteMessage_apiError(t *testing.T) {
+	tests := []struct {
+		title     string
+		extraArgs []string
+		wantCode  int
+	}{
+		{"without nofail", nil, 1},
+		{"with nofail", []string{"--nofail"}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.title, func(t *testing.T) {
+			t.Setenv("SLACK_TOKEN", "")
+			t.Setenv("SLACK_QUICKPOST_PROFILE", "")
+
+			client := &SlackMockClient{DeleteMessageErr: errors.New("cant_delete_message")}
+			args := append([]string{"slack-quickpost", "--token", "xoxb-test", "--delete", "https://example.slack.com/archives/C123/p1700000000000200"}, tt.extraArgs...)
+			code, stdout, _ := runWithClient(args, client)
+
+			if code != tt.wantCode {
+				t.Errorf("exit code = %d, want %d", code, tt.wantCode)
+			}
+			assertStdoutIsErrorJSON(t, stdout, "failed to delete message: cant_delete_message")
+		})
+	}
+}
+
 func Test_runWith_errorCases(t *testing.T) {
 	tests := []struct {
 		title      string
@@ -193,6 +336,42 @@ func Test_runWith_errorCases(t *testing.T) {
 			title:      "file not found",
 			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--file", "tests/not-exist.txt"},
 			wantSubstr: "failed to open file",
+		},
+		{
+			title:      "delete with post mode option",
+			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--delete", "https://example.slack.com/archives/C123/p1234567890123456", "--text", "hello"},
+			wantSubstr: "--delete cannot be used with --text",
+		},
+		{
+			title:      "delete with channel",
+			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--delete", "https://example.slack.com/archives/C123/p1234567890123456", "--channel", "C123"},
+			wantSubstr: "--delete cannot be used with --channel",
+		},
+		{
+			// 空文字指定でも排他違反として扱う。複数あれば flag 名順にすべて列挙する
+			title:      "delete with multiple options including empty value",
+			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--delete", "https://example.slack.com/archives/C123/p1234567890123456", "--username", "", "--snippet"},
+			wantSubstr: "--delete cannot be used with --snippet, --username",
+		},
+		{
+			title:      "delete with extra url",
+			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--delete", "https://example.slack.com/archives/C123/p1234567890123456", "https://example.slack.com/archives/C123/p1234567890999999"},
+			wantSubstr: "--delete takes exactly one url, got extra arguments: https://example.slack.com/archives/C123/p1234567890999999",
+		},
+		{
+			title:      "delete specified twice",
+			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--delete", "https://example.slack.com/archives/C123/p1234567890123456", "--delete=https://example.slack.com/archives/C123/p1234567890999999"},
+			wantSubstr: "--delete can be specified only once",
+		},
+		{
+			title:      "delete with invalid url",
+			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--delete", "https://example.slack.com/archives/C123"},
+			wantSubstr: "invalid message url (want a permalink like https://<workspace>.slack.com/archives/<channel>/p<timestamp>)",
+		},
+		{
+			title:      "delete token missing",
+			args:       []string{"slack-quickpost", "--delete", "https://example.slack.com/archives/C123/p1234567890123456"},
+			wantSubstr: "slack token is required",
 		},
 	}
 
