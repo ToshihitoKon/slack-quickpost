@@ -173,6 +173,10 @@ The `timestamp` key is omitted when it is not available (e.g. `--file` /
 snippet uploads, since the Slack API used for file uploads does not return a
 message timestamp).
 
+For the same uploads, `channel` is the requested channel value, not a value
+echoed back from the Slack API — the upload API response does not include
+one.
+
 On failure, only the `error` key is present, regardless of `--nofail`:
 
 ```json
@@ -190,17 +194,7 @@ Two exceptions to "stdout is JSON-only":
   `2`; nothing is printed to stdout, and `--nofail` has no effect on this
   exit code.
 
-### Breaking changes in v1.0
-
-- stdout previously mixed plain-text error messages and an `[INFO]` log
-  line with the `CliOutput` JSON. It is now JSON-only; those messages moved
-  to stderr and error messages are now conveyed via the `error` key above.
-- Success output previously had no trailing newline; it now does.
-- `timestamp` previously appeared as `"timestamp":""` when unavailable; the
-  key is now omitted entirely.
-- `--file` upload output still reflects the requested channel value, not a
-  value echoed back from the Slack API — the upload API response does not
-  include one.
+See [CHANGES.md](CHANGES.md) for breaking changes in v1.0.
 
 ## comamnd options
 
