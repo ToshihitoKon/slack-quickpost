@@ -234,23 +234,21 @@ func Test_runWith_errorCases(t *testing.T) {
 func assertStdoutIsErrorJSON(t *testing.T, stdout, wantSubstr string) {
 	t.Helper()
 
-	if !strings.HasSuffix(stdout, "\n") {
-		t.Fatalf("stdout = %q, want to end with newline", stdout)
-	}
-	lines := strings.Split(strings.TrimRight(stdout, "\n"), "\n")
-	if len(lines) != 1 {
-		t.Fatalf("stdout = %q, want exactly one line", stdout)
+	if !strings.HasSuffix(stdout, "\n") || strings.Count(stdout, "\n") != 1 {
+		t.Fatalf("stdout = %q, want exactly one line ending with newline", stdout)
 	}
 
-	var got CliOutput
-	if err := json.Unmarshal([]byte(lines[0]), &got); err != nil {
-		t.Fatalf("stdout line is not valid JSON: %q: %s", lines[0], err)
+	// CliOutputにUnmarshalすると余分なキーを検出できないため、mapで受けてキー数を見る
+	var got map[string]any
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("stdout is not valid JSON: %q: %s", stdout, err)
 	}
-	if got.Channel != "" || got.Timestamp != "" {
-		t.Errorf("stdout = %q, want channel/timestamp to be empty on error", stdout)
+	if len(got) != 1 {
+		t.Errorf("stdout = %q, want only the error key", stdout)
 	}
-	if !strings.Contains(got.Error, wantSubstr) {
-		t.Errorf("error = %q, want to contain %q", got.Error, wantSubstr)
+	errMsg, ok := got["error"].(string)
+	if !ok || !strings.Contains(errMsg, wantSubstr) {
+		t.Errorf("error = %v, want a string containing %q", got["error"], wantSubstr)
 	}
 }
 
@@ -268,9 +266,12 @@ func Test_runWith_unknownFlag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.title, func(t *testing.T) {
 			// An unknown flag always exits with 2, regardless of --nofail.
-			code, _, stderr := runWithMock(tt.args)
+			code, stdout, stderr := runWithMock(tt.args)
 			if code != 2 {
 				t.Errorf("exit code = %d, want 2", code)
+			}
+			if stdout != "" {
+				t.Errorf("stdout = %q, want empty", stdout)
 			}
 			// main.go manually reproduces pflag's ExitOnError output order
 			// ("Usage of ...:" -> flag list -> "unknown flag: ..."); verify it holds.
@@ -315,10 +316,13 @@ func Test_runWith_help(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.title, func(t *testing.T) {
-			// Usage text depends on the program name, so only check the exit code.
-			code, _, _ := runWithMock(tt.args)
+			// Usage text depends on the program name, so stderr is not checked.
+			code, stdout, _ := runWithMock(tt.args)
 			if code != 0 {
 				t.Errorf("exit code = %d, want 0", code)
+			}
+			if stdout != "" {
+				t.Errorf("stdout = %q, want empty", stdout)
 			}
 		})
 	}
