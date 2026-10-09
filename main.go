@@ -233,11 +233,11 @@ func Do(opts *Options) (*CliOutput, error) {
 
 	switch opts.mode {
 	case "text":
-		// 3000文字以上は自動でスニペットにする
+		// 3000バイトを超えると自動でスニペットにする（Slackの上限は3000文字だが、判定はバイト数で行う）
 		// https://api.slack.com/reference/block-kit/blocks#section_fields
 		if 3000 < len(opts.text) {
 			opts.snippetMode = true
-			fmt.Fprintln(w, "[INFO] text length exceed limits (3000 characters), upload snippets.")
+			fmt.Fprintln(w, "[INFO] text length exceed limits (3000 bytes), upload snippets.")
 		}
 
 		if opts.snippetMode {

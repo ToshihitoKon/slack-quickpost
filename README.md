@@ -186,7 +186,7 @@ On failure, only the `error` key is present, regardless of `--nofail`:
 `--nofail` only changes the exit code (`1` → `0` on failure); it never
 changes what is printed to stdout. Human-readable diagnostics (e.g. the
 `[INFO]` notice printed when text is auto-uploaded as a snippet for
-exceeding 3000 characters) go to stderr, never stdout.
+exceeding 3000 bytes) go to stderr, never stdout.
 
 Two exceptions to "stdout is JSON-only":
 - `--version` prints a plain version string to stdout.

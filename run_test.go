@@ -49,7 +49,7 @@ func Test_runWith_postText_autoSnippetOverLimit(t *testing.T) {
 	if stdout != wantStdout {
 		t.Errorf("stdout = %q, want %q", stdout, wantStdout)
 	}
-	wantStderr := "[INFO] text length exceed limits (3000 characters), upload snippets.\n"
+	wantStderr := "[INFO] text length exceed limits (3000 bytes), upload snippets.\n"
 	if stderr != wantStderr {
 		t.Errorf("stderr = %q, want %q", stderr, wantStderr)
 	}
