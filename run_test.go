@@ -433,6 +433,17 @@ func Test_runWith_errorCases(t *testing.T) {
 			wantSubstr: "one of --text, --textfile, --blocks or --file is required",
 		},
 		{
+			title:      "multiple post modes",
+			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--text", "hello", "--file", "tests/upload.txt"},
+			wantSubstr: "--text, --file cannot be used together",
+		},
+		{
+			// 空文字指定でも指定ありとして扱う（--delete の排他と同じ）
+			title:      "multiple post modes including empty value",
+			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--text", "", "--blocks", `[{"type":"divider"}]`},
+			wantSubstr: "--text, --blocks cannot be used together",
+		},
+		{
 			title:      "invalid blocks json",
 			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--blocks", "{not json"},
 			wantSubstr: "failed to parse blocks json",

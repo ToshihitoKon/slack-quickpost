@@ -176,8 +176,8 @@ slack-quickpost \
   Any other option (including `--channel`), a second `--delete` or an extra
   positional argument is an error. `SLACK_TOKEN` / `SLACK_QUICKPOST_PROFILE`
   work as usual.
-- `--version` and `--help` still take precedence and exit without deleting
-  anything.
+- `--version`, `--help` and `--completion` still take precedence and exit
+  without deleting anything.
 - The default channel from a profile or an embedded binary is ignored.
 - The output has the same shape as a post, with the deleted message's
   `channel` and `timestamp`.
@@ -267,8 +267,16 @@ See [CHANGES.md](CHANGES.md) for breaking changes in v1.0.
 --version            print version
 ```
 
-Positional arguments are not accepted; any positional argument is an
-error. This catches a flag taken as the value of the preceding one when it
-leaves an argument behind (e.g. `--text --delete URL`, where `--delete`
-becomes the text and `URL` is left over). A flag taken as a value with
-nothing left over (e.g. `--text --delete`) is still posted as text.
+- `--text`, `--textfile`, `--blocks` and `--file` are mutually exclusive,
+  even when one of them is given an empty value.
+- `--snippet` only applies to `--text` / `--textfile`; it is ignored with
+  `--blocks` and `--file`.
+- `--username`, `--icon` and `--icon-url` are ignored for `--file` and
+  snippet uploads (including auto-snippets over 3000 bytes).
+- When both `--icon` and `--icon-url` are given, `--icon` is used.
+- Positional arguments are not accepted; unless `--help`, `--version` or
+  `--completion` is given, any positional argument is an error. This
+  catches a flag taken as the value of the preceding one when it leaves an
+  argument behind (e.g. `--text --delete URL`, where `--delete` becomes
+  the text and `URL` is left over). A flag taken as a value with nothing
+  left over (e.g. `--text --delete`) is still posted as text.

@@ -18,8 +18,12 @@
   with code `1`, even without a profile. It is now looked up only when a
   profile is used (`--profile` / `SLACK_QUICKPOST_PROFILE`), taken from
   `$HOME` (`%USERPROFILE%` on Windows) instead of the user database, and a
-  failure is reported via the
-  `error` key like other failures, so `--nofail` applies to it.
+  failure is reported via the `error` key like other failures, so
+  `--nofail` applies to it.
+- Specifying more than one of `--text`, `--textfile`, `--blocks` and
+  `--file` is now an error, even when one of them has an empty value.
+  Previously one of them was used silently, in the order `--text` >
+  `--blocks` > `--textfile` > `--file`, and an empty value was skipped.
 - Positional arguments were previously ignored silently. They are now an
   error.
 - Success output previously had no trailing newline; it now does.

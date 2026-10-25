@@ -132,6 +132,19 @@ func flagsConflictingWithDelete(fs *flag.FlagSet) []string {
 	return names
 }
 
+// 投稿モードを選ぶフラグ。複数指定を優先順で片方だけ採用すると指定ミスに気づけないため、排他にする
+var postModeFlags = []string{"text", "textfile", "blocks", "file"}
+
+func specifiedFlags(fs *flag.FlagSet, names []string) []string {
+	var specified []string
+	for _, name := range names {
+		if fs.Changed(name) {
+			specified = append(specified, "--"+name)
+		}
+	}
+	return specified
+}
+
 func strGetFirstOne(vars ...string) string {
 	for _, v := range vars {
 		if v != "" {
@@ -275,6 +288,10 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		opts.postOpts.channel = strGetFirstOne(*optChannel, profile.Channel, embeddedChannel)
 		if opts.postOpts.channel == "" {
 			errText = append(errText, "channel is required")
+		}
+
+		if modes := specifiedFlags(fs, postModeFlags); 1 < len(modes) {
+			errText = append(errText, fmt.Sprintf("%s cannot be used together", strings.Join(modes, ", ")))
 		}
 
 		// post mode
