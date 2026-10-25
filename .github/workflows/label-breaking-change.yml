@@ -1,0 +1,23 @@
+name: label-breaking-change
+on:
+  pull_request_target:
+    types: [opened, edited, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      # pull_request_target は fork の PR でも書き込み権限で動くため、コードは checkout せず、タイトルは式展開ではなく環境変数で渡す
+      - name: add breaking-change to "type!:" / "type(scope)!:" titles
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          pattern='^[a-z]+(\([^)]*\))?!:'
+          if [[ $TITLE =~ $pattern ]]; then
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" -f 'labels[]=breaking-change'
+          fi

@@ -25,3 +25,5 @@ changelog:
   use: github-native
 release:
   prerelease: auto
+  footer: |
+    See [CHANGES.md](https://github.com/ToshihitoKon/slack-quickpost/blob/{{ .Tag }}/CHANGES.md) for breaking changes and how to migrate.
