@@ -43,6 +43,7 @@ type CliOutput struct {
 
 type Options struct {
 	slackClient SlackClient
+	stdout      io.Writer
 
 	token    string
 	text     string
@@ -73,46 +74,68 @@ func strGetFirstOne(vars ...string) string {
 }
 
 func main() {
+	os.Exit(run(os.Args, os.Stdout, os.Stderr))
+}
+
+func run(args []string, stdout, stderr io.Writer) int {
+	return runWith(args, stdout, stderr, func(token string) SlackClient {
+		return slack.New(token)
+	})
+}
+
+func runWith(args []string, stdout, stderr io.Writer, newClient func(token string) SlackClient) int {
+	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
 	var (
 		// mode: print version
-		printVersion = flag.Bool("version", false, "print version")
+		printVersion = fs.Bool("version", false, "print version")
 
 		// mode: post text
-		optText     = flag.String("text", "", "post text")
-		optTextFile = flag.String("textfile", "", "post text file path")
-		snippetMode = flag.Bool("snippet", false, "post text as snippet")
+		optText     = fs.String("text", "", "post text")
+		optTextFile = fs.String("textfile", "", "post text file path")
+		snippetMode = fs.Bool("snippet", false, "post text as snippet")
 
 		// mode: post file
-		filepath = flag.String("file", "", "post file path")
+		filepath = fs.String("file", "", "post file path")
 
 		// mode: post blocks json
-		optBlocks = flag.String("blocks", "", "post BlockKit json")
+		optBlocks = fs.String("blocks", "", "post BlockKit json")
 
 		// must options
 		envToken   = os.Getenv("SLACK_TOKEN")
-		optToken   = flag.String("token", "", "slack app OAuth token")
-		optChannel = flag.String("channel", "", "post slack channel id")
+		optToken   = fs.String("token", "", "slack app OAuth token")
+		optChannel = fs.String("channel", "", "post slack channel id")
 
 		// optional
 		envProfile = os.Getenv("SLACK_QUICKPOST_PROFILE")
-		optProfile = flag.String("profile", "", "slack quickpost profile name")
-		threadTs   = flag.String("thread-ts", "", "post under thread")
-		iconEmoji  = flag.String("icon", "", "icon emoji")
-		iconUrl    = flag.String("icon-url", "", "icon image url")
-		username   = flag.String("username", "", "user name")
+		optProfile = fs.String("profile", "", "slack quickpost profile name")
+		threadTs   = fs.String("thread-ts", "", "post under thread")
+		iconEmoji  = fs.String("icon", "", "icon emoji")
+		iconUrl    = fs.String("icon-url", "", "icon image url")
+		username   = fs.String("username", "", "user name")
 
-		noFail = flag.Bool("nofail", false, "always return success code(0)")
+		noFail = fs.Bool("nofail", false, "always return success code(0)")
 
 		errText []string
 	)
-	flag.Parse()
+	if err := fs.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		fmt.Fprintf(stderr, "Usage of %s:\n", fs.Name())
+		fs.PrintDefaults()
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
 
 	if *printVersion {
-		fmt.Println(version())
-		os.Exit(0)
+		fmt.Fprintln(stdout, version())
+		return 0
 	}
 
 	opts := &Options{
+		stdout:      stdout,
 		snippetMode: *snippetMode,
 		filepath:    *filepath,
 		postOpts: &PostOptions{
@@ -125,7 +148,7 @@ func main() {
 	usr, err := user.Current()
 	if err != nil {
 		log.Printf("error: user.Current(). %s", err)
-		os.Exit(1)
+		return 1
 	}
 
 	profileName := strGetFirstOne(*optProfile, envProfile)
@@ -172,40 +195,45 @@ func main() {
 	}
 
 	if 0 < len(errText) {
-		fmt.Println(strings.Join(errText, "\n"))
+		fmt.Fprintln(stdout, strings.Join(errText, "\n"))
 		if *noFail {
-			os.Exit(0)
+			return 0
 		}
-		os.Exit(1)
+		return 1
 	}
 
-	opts.slackClient = slack.New(opts.token)
+	opts.slackClient = newClient(opts.token)
 
 	output, err := Do(opts)
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Fprintln(stdout, err.Error())
 		if *noFail {
-			os.Exit(0)
+			return 0
 		}
-		os.Exit(1)
+		return 1
 	}
 
 	b, err := json.Marshal(output)
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Fprintln(stdout, err.Error())
 		if *noFail {
-			os.Exit(0)
+			return 0
 		}
-		os.Exit(1)
+		return 1
 	}
 
-	fmt.Printf("%s", b)
-	return
+	fmt.Fprintf(stdout, "%s", b)
+	return 0
 }
 
 func Do(opts *Options) (*CliOutput, error) {
 	var err error
 	var output *CliOutput
+
+	w := opts.stdout
+	if w == nil {
+		w = os.Stdout
+	}
 
 	switch opts.mode {
 	case "text":
@@ -213,7 +241,7 @@ func Do(opts *Options) (*CliOutput, error) {
 		// https://api.slack.com/reference/block-kit/blocks#section_fields
 		if 3000 < len(opts.text) {
 			opts.snippetMode = true
-			fmt.Println("[INFO] text length exceed limits (3000 characters), upload snippets.")
+			fmt.Fprintln(w, "[INFO] text length exceed limits (3000 characters), upload snippets.")
 		}
 
 		if opts.snippetMode {
