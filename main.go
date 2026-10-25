@@ -37,14 +37,16 @@ func version() string {
 type CliOutput struct {
 	Channel   string `json:"channel,omitempty"`
 	Timestamp string `json:"timestamp,omitempty"`
+	File      string `json:"file,omitempty"`
 	Error     string `json:"error,omitempty"`
 }
 
 const (
-	modeText   = "text"
-	modeBlocks = "blocks"
-	modeFile   = "file"
-	modeDelete = "delete"
+	modeText          = "text"
+	modeBlocks        = "blocks"
+	modeFile          = "file"
+	modeDeleteMessage = "delete-message"
+	modeDeleteFile    = "delete-file"
 )
 
 type Options struct {
@@ -60,7 +62,7 @@ type Options struct {
 	snippetMode bool
 
 	postOpts     *PostOptions
-	deleteTarget MessageRef
+	deleteTarget deleteRef
 }
 
 type PostOptions struct {
@@ -76,26 +78,37 @@ type MessageRef struct {
 	timestamp string
 }
 
+// deleteRef は --delete の URL が指す削除対象。message と fileID のどちらか一方だけが入る
+type deleteRef struct {
+	message MessageRef
+	fileID  string
+}
+
 // permalink の p 以降はメッセージの ts から "." を除いた数字列で、末尾 6 桁が小数部にあたる。
 var permalinkPathPattern = regexp.MustCompile(`^/archives/([A-Z0-9]+)/p(\d+)(\d{6})$`)
 
-const permalinkFormat = "https://<workspace>.slack.com/archives/<channel>/p<timestamp>"
+// ファイル URL は /files/<user>/<file>/<name> で、<name> は削除対象の特定に使わない。
+var fileURLPathPattern = regexp.MustCompile(`^/files/[A-Z0-9]+/(F[A-Z0-9]+)(?:/.*)?$`)
 
-// parseMessageURL は Slack の「リンクをコピー」で得られる permalink から channel と ts を取り出す。
+const (
+	permalinkFormat = "https://<workspace>.slack.com/archives/<channel>/p<timestamp>"
+	fileURLFormat   = "https://<workspace>.slack.com/files/<user>/<file>/<name>"
+)
+
+// parseDeleteURL は Slack の「リンクをコピー」で得られる URL から削除対象を取り出す。
+// メッセージは permalink から channel と ts を、ファイル・スニペットはファイル URL から file ID を取る。
 // スレッド返信の permalink に付く thread_ts クエリは親の ts なので使わない。
-// 削除対象は channel と ts だけで決まるため、ホスト部は検証しない。
-func parseMessageURL(rawURL string) (MessageRef, error) {
-	var m []string
+// 削除対象はパスだけで決まるため、ホスト部は検証しない。
+func parseDeleteURL(rawURL string) (deleteRef, error) {
 	if u, err := url.Parse(rawURL); err == nil {
-		m = permalinkPathPattern.FindStringSubmatch(u.Path)
+		if m := permalinkPathPattern.FindStringSubmatch(u.Path); m != nil {
+			return deleteRef{message: MessageRef{channel: m[1], timestamp: m[2] + "." + m[3]}}, nil
+		}
+		if m := fileURLPathPattern.FindStringSubmatch(u.Path); m != nil {
+			return deleteRef{fileID: m[1]}, nil
+		}
 	}
-	if m == nil {
-		return MessageRef{}, fmt.Errorf("invalid message url (want a permalink like %s): %s", permalinkFormat, rawURL)
-	}
-	return MessageRef{
-		channel:   m[1],
-		timestamp: m[2] + "." + m[3],
-	}, nil
+	return deleteRef{}, fmt.Errorf("invalid delete url (want a message permalink like %s or a file url like %s): %s", permalinkFormat, fileURLFormat, rawURL)
 }
 
 // --delete はこれら以外のフラグと排他。後から追加されるフラグも既定で排他になるよう許可リストで持つ。
@@ -217,7 +230,7 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 
 		errText []string
 	)
-	fs.Var(optDelete, "delete", "delete message by permalink url")
+	fs.Var(optDelete, "delete", "delete message or file by its url")
 	fs.Var(optCompletion, "completion", "print shell completion script (bash or zsh)")
 
 	if err := fs.Parse(args[1:]); err != nil {
@@ -270,20 +283,23 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		errText = append(errText, "slack token is required")
 	}
 
-	// delete mode は channel を URL から取るため、profile や焼き込みの channel は使わない
+	// 削除対象は URL だけで決まるため、profile や焼き込みの channel は使わない
 	if 0 < optDelete.count {
-		opts.mode = modeDelete
 		if conflicting := flagsConflictingWithDelete(fs); 0 < len(conflicting) {
 			errText = append(errText, fmt.Sprintf("--delete cannot be used with %s", strings.Join(conflicting, ", ")))
 		}
 		if 1 < optDelete.count {
 			errText = append(errText, "--delete can be specified only once")
 		}
-		target, err := parseMessageURL(optDelete.value)
+		target, err := parseDeleteURL(optDelete.value)
 		if err != nil {
 			errText = append(errText, err.Error())
 		}
 		opts.deleteTarget = target
+		opts.mode = modeDeleteMessage
+		if target.fileID != "" {
+			opts.mode = modeDeleteFile
+		}
 	} else {
 		opts.postOpts.channel = strGetFirstOne(*optChannel, profile.Channel, embeddedChannel)
 		if opts.postOpts.channel == "" {
@@ -385,10 +401,17 @@ func Do(opts *Options) (*CliOutput, error) {
 		}
 		return output, nil
 
-	case modeDelete:
-		output, err := deleteMessage(opts.slackClient, opts.deleteTarget)
+	case modeDeleteMessage:
+		output, err := deleteMessage(opts.slackClient, opts.deleteTarget.message)
 		if err != nil {
 			return nil, fmt.Errorf("failed to delete message: %w", err)
+		}
+		return output, nil
+
+	case modeDeleteFile:
+		output, err := deleteFile(opts.slackClient, opts.deleteTarget.fileID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to delete file: %w", err)
 		}
 		return output, nil
 	}
@@ -443,7 +466,8 @@ func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, f
 		Channel:         postOpts.channel,
 		ThreadTimestamp: postOpts.threadTs,
 	}
-	if _, err := client.UploadFile(fups); err != nil {
+	uploaded, err := client.UploadFile(fups)
+	if err != nil {
 		return nil, err
 	}
 	output := &CliOutput{
@@ -451,6 +475,7 @@ func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, f
 		// リクエスト時点のchannelをそのまま使う
 		Channel: postOpts.channel,
 		// Timestamp: UploadFileはtimestampを取得できない
+		File: uploaded.ID,
 	}
 	return output, nil
 }
@@ -466,4 +491,12 @@ func deleteMessage(client SlackClient, target MessageRef) (*CliOutput, error) {
 		Timestamp: ts,
 	}
 	return output, nil
+}
+
+func deleteFile(client SlackClient, fileID string) (*CliOutput, error) {
+	if err := client.DeleteFile(fileID); err != nil {
+		return nil, err
+	}
+	// files.delete のレスポンスは ok しか持たないため、削除を依頼した file ID をそのまま返す
+	return &CliOutput{File: fileID}, nil
 }

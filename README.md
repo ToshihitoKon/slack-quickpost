@@ -161,15 +161,20 @@ slack-quickpost \
   --file [FILE_PATH]
 ```
 
-### delete message
+### delete message or file
 
-Pass a message permalink (the URL from "Copy link" in Slack). The channel and
-timestamp are taken from the URL. Quote the URL: permalinks of thread replies
-contain `?` and `&`.
+Pass the URL from "Copy link" in Slack. Quote the URL: permalinks of thread
+replies contain `?` and `&`.
 
 ```
+# message: the channel and timestamp are taken from the permalink
 slack-quickpost \
   --delete 'https://[WORKSPACE].slack.com/archives/[CHANNEL_ID]/p[TIMESTAMP]'
+
+# file or snippet (including auto-snippets over 3000 bytes):
+# the file ID is taken from the file link
+slack-quickpost \
+  --delete 'https://[WORKSPACE].slack.com/files/[USER_ID]/[FILE_ID]/[FILE_NAME]'
 ```
 
 - `--delete` can only be combined with `--token`, `--profile` and `--nofail`.
@@ -179,13 +184,14 @@ slack-quickpost \
 - `--version`, `--help` and `--completion` still take precedence and exit
   without deleting anything.
 - The default channel from a profile or an embedded binary is ignored.
-- The output has the same shape as a post, with the deleted message's
-  `channel` and `timestamp`.
+- Deleting a message prints the same shape as a post, with the deleted
+  message's `channel` and `timestamp`. Deleting a file prints only the
+  deleted file's ID: `{"file":"F0123ABCD"}`.
 - With a bot token, Slack only allows deleting messages posted by that bot
   (`chat.delete` API restriction).
-- File and snippet posts (including auto-snippets over 3000 bytes) cannot be
-  deleted: Slack gives them only a file link (`/files/...`), not a message
-  permalink.
+- Deleting a file needs the `files:write` scope, the same scope used for
+  uploads. Slack returns `cant_delete_file` if the token is not allowed to
+  delete that file.
 - Embedded binaries can use `--delete` too, so anyone who has the binary can
   delete whatever its embedded token is allowed to delete.
 
@@ -216,13 +222,20 @@ On success:
 {"channel":"C123","timestamp":"1234567890.123456"}
 ```
 
+Deleting a file with `--delete` prints `{"file":"F0123ABCD"}` instead (see
+[delete message or file](#delete-message-or-file)).
+
 The `timestamp` key is omitted when it is not available (e.g. `--file` /
 snippet uploads, since the Slack API used for file uploads does not return a
 message timestamp).
 
 For the same uploads, `channel` is the requested channel value, not a value
 echoed back from the Slack API — the upload API response does not include
-one.
+one. `file` holds the uploaded file's ID:
+
+```json
+{"channel":"C123","file":"F0123ABCD"}
+```
 
 On failure, only the `error` key is present, regardless of `--nofail`:
 
@@ -252,7 +265,7 @@ See [CHANGES.md](CHANGES.md) for breaking changes in v1.0.
 --blocks string      post BlockKit json
 --channel string     post slack channel id
 --completion string  print shell completion script (bash or zsh)
---delete string      delete message by permalink url
+--delete string      delete message or file by its url
 --file string        post file path
 --icon string        icon emoji
 --icon-url string    icon image url

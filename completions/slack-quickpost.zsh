@@ -15,7 +15,7 @@ _slack-quickpost() {
     '(- *)--completion=[print shell completion script (bash or zsh)]:shell:(bash zsh)' \
     '--blocks=[post BlockKit json]:json: ' \
     '--channel=[post slack channel id]:channel id: ' \
-    '--delete=[delete message by permalink url]:url: ' \
+    '--delete=[delete message or file by its url]:url: ' \
     '--file=[post file path]:file:_files' \
     '--icon=[icon emoji]:emoji: ' \
     '--icon-url=[icon image url]:url: ' \
