@@ -63,6 +63,9 @@ SLACK_QUICKPOST_PROFILE=profile-name slack-quickpost --text [TEXT]
 slack-quickpost --profile profile-name --text [TEXT]
 ```
 
+The `.yaml` extension may be included in the profile name
+(e.g. `--profile profile-name.yaml`).
+
 #### Embedded binary
 
 Build a `slack-quickpost` binary with a token and default channel baked in, so
@@ -186,6 +189,22 @@ slack-quickpost \
 - Embedded binaries can use `--delete` too, so anyone who has the binary can
   delete whatever its embedded token is allowed to delete.
 
+### shell completion
+
+`--completion` prints a completion script for bash or zsh. `--profile`
+completes the profile names in `~/.config/slack-quickpost/`.
+
+```
+# zsh: add to ~/.zshrc after compinit
+eval "$(slack-quickpost --completion zsh)"
+
+# bash: add to ~/.bashrc
+eval "$(slack-quickpost --completion bash)"
+```
+
+For zsh, you can instead save the output of `slack-quickpost --completion zsh`
+as `_slack-quickpost` in a directory on `$fpath`.
+
 ## output
 
 stdout always prints exactly one line of `CliOutput` JSON, followed by a
@@ -232,6 +251,7 @@ See [CHANGES.md](CHANGES.md) for breaking changes in v1.0.
 ```
 --blocks string      post BlockKit json
 --channel string     post slack channel id
+--completion string  print shell completion script (bash or zsh)
 --delete string      delete message by permalink url
 --file string        post file path
 --icon string        icon emoji

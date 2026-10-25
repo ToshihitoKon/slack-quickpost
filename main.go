@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"os/user"
-	"path"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
@@ -166,6 +165,9 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		// mode: print version
 		printVersion = fs.Bool("version", false, "print version")
 
+		// mode: print shell completion script
+		optCompletion = &completionShellValue{}
+
 		// mode: post text
 		optText     = fs.String("text", "", "post text")
 		optTextFile = fs.String("textfile", "", "post text file path")
@@ -198,6 +200,7 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		errText []string
 	)
 	fs.Var(optDelete, "delete", "delete message by permalink url")
+	fs.Var(optCompletion, "completion", "print shell completion script (bash or zsh)")
 
 	if err := fs.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -211,6 +214,11 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 
 	if *printVersion {
 		fmt.Fprintln(stdout, version())
+		return 0
+	}
+
+	if optCompletion.shell != "" {
+		fmt.Fprint(stdout, completionScripts[optCompletion.shell])
 		return 0
 	}
 
@@ -234,7 +242,7 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 
 	var profile = &Profile{}
 	if profileName != "" {
-		profPath := path.Join(usr.HomeDir, ".config", "slack-quickpost", profileName+".yaml")
+		profPath := profilePath(usr.HomeDir, profileName)
 		profile, err = parseProfile(profPath)
 		if err != nil {
 			errText = append(errText, fmt.Sprintf("failed read profile %s. %s", profPath, err.Error()))

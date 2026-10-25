@@ -28,6 +28,9 @@ unset SLACK_TOKEN
 SLACK_QUICKPOST_PROFILE=$testProfile "$binpath" \
     --text "case: token and channel given profile 2"
 
+"$binpath" --profile "${testProfile}.yaml" \
+    --text "case: profile name given with .yaml extension"
+
 # text / token given as option
 post --text "case: token given command option, username and icon not given" \
     --token "$slackToken"
