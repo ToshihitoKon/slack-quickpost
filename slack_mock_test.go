@@ -4,7 +4,10 @@ import (
 	"github.com/slack-go/slack"
 )
 
-const mockPostMessageTimestamp = "1234567890.123456"
+const (
+	mockPostMessageTimestamp = "1234567890.123456"
+	mockUploadFileID         = "F0000MOCK"
+)
 
 type SlackMockClient struct {
 	ContentType string
@@ -12,8 +15,10 @@ type SlackMockClient struct {
 	UploadFileCalls    []slack.UploadFileParameters
 	PostMessageCalls   []string
 	DeleteMessageCalls []MessageRef
+	DeleteFileCalls    []string
 
 	DeleteMessageErr error
+	DeleteFileErr    error
 }
 
 func NewSlackMockClient() *SlackMockClient {
@@ -23,7 +28,7 @@ func NewSlackMockClient() *SlackMockClient {
 func (smc *SlackMockClient) UploadFile(params slack.UploadFileParameters) (*slack.FileSummary, error) {
 	smc.ContentType = "file"
 	smc.UploadFileCalls = append(smc.UploadFileCalls, params)
-	return nil, nil
+	return &slack.FileSummary{ID: mockUploadFileID}, nil
 }
 
 func (smc *SlackMockClient) PostMessage(channel string, opts ...slack.MsgOption) (string, string, error) {
@@ -34,10 +39,16 @@ func (smc *SlackMockClient) PostMessage(channel string, opts ...slack.MsgOption)
 
 // chat.delete は削除したメッセージの channel と ts を返すため、モックは引数をそのまま返す
 func (smc *SlackMockClient) DeleteMessage(channel, messageTimestamp string) (string, string, error) {
-	smc.ContentType = "delete"
+	smc.ContentType = "delete-message"
 	smc.DeleteMessageCalls = append(smc.DeleteMessageCalls, MessageRef{channel: channel, timestamp: messageTimestamp})
 	if smc.DeleteMessageErr != nil {
 		return "", "", smc.DeleteMessageErr
 	}
 	return channel, messageTimestamp, nil
+}
+
+func (smc *SlackMockClient) DeleteFile(fileID string) error {
+	smc.ContentType = "delete-file"
+	smc.DeleteFileCalls = append(smc.DeleteFileCalls, fileID)
+	return smc.DeleteFileErr
 }
