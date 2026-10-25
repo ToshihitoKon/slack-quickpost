@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/user"
 	"path"
@@ -37,13 +36,14 @@ func version() string {
 }
 
 type CliOutput struct {
-	Channel   string `json:"channel"`
-	Timestamp string `json:"timestamp"`
+	Channel   string `json:"channel,omitempty"`
+	Timestamp string `json:"timestamp,omitempty"`
+	Error     string `json:"error,omitempty"`
 }
 
 type Options struct {
 	slackClient SlackClient
-	stdout      io.Writer
+	infoOut     io.Writer
 
 	token    string
 	text     string
@@ -83,6 +83,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 	})
 }
 
+// writeError は失敗時の出力契約（stdoutにJSON1行、--nofailはexit codeのみ変える）を一箇所に集約する。
+// Encodeの書き込みエラーはここでは無視する。既にエラー経路にいるため報告先がなく、
+// --nofailの有無に関わらずexit codeは変わらない。
+func writeError(stdout io.Writer, msg string, noFail bool) int {
+	_ = json.NewEncoder(stdout).Encode(&CliOutput{Error: msg})
+	if noFail {
+		return 0
+	}
+	return 1
+}
+
 func runWith(args []string, stdout, stderr io.Writer, newClient func(token string) SlackClient) int {
 	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -115,7 +126,7 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		iconUrl    = fs.String("icon-url", "", "icon image url")
 		username   = fs.String("username", "", "user name")
 
-		noFail = fs.Bool("nofail", false, "always return success code(0)")
+		noFail = fs.Bool("nofail", false, "exit with code 0 even on failure (except flag parse errors)")
 
 		errText []string
 	)
@@ -135,7 +146,7 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 	}
 
 	opts := &Options{
-		stdout:      stdout,
+		infoOut:     stderr,
 		snippetMode: *snippetMode,
 		filepath:    *filepath,
 		postOpts: &PostOptions{
@@ -147,8 +158,7 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 	}
 	usr, err := user.Current()
 	if err != nil {
-		log.Printf("error: user.Current(). %s", err)
-		return 1
+		return writeError(stdout, fmt.Sprintf("user.Current(): %s", err), *noFail)
 	}
 
 	profileName := strGetFirstOne(*optProfile, envProfile)
@@ -158,18 +168,18 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		profPath := path.Join(usr.HomeDir, ".config", "slack-quickpost", profileName+".yaml")
 		profile, err = parseProfile(profPath)
 		if err != nil {
-			errText = append(errText, fmt.Sprintf("error: failed read profile %s. %s", profPath, err.Error()))
+			errText = append(errText, fmt.Sprintf("failed read profile %s. %s", profPath, err.Error()))
 		}
 	}
 
 	opts.token = strGetFirstOne(*optToken, envToken, profile.Token, embeddedToken)
 	if opts.token == "" {
-		errText = append(errText, "error: slack token is required")
+		errText = append(errText, "slack token is required")
 	}
 
 	opts.postOpts.channel = strGetFirstOne(*optChannel, profile.Channel, embeddedChannel)
 	if opts.postOpts.channel == "" {
-		errText = append(errText, "error: channel is required")
+		errText = append(errText, "channel is required")
 	}
 
 	// post mode
@@ -183,7 +193,7 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 	case *optTextFile != "":
 		bytes, err := ioutil.ReadFile(*optTextFile)
 		if err != nil {
-			errText = append(errText, fmt.Sprintf("error: failed read text file: %s", err))
+			errText = append(errText, fmt.Sprintf("failed read text file: %s", err))
 		}
 		opts.text = string(bytes)
 		opts.mode = "text"
@@ -191,38 +201,24 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		opts.filepath = *filepath
 		opts.mode = "file"
 	default:
-		errText = append(errText, "error: --text option is required")
+		errText = append(errText, "--text option is required")
 	}
 
 	if 0 < len(errText) {
-		fmt.Fprintln(stdout, strings.Join(errText, "\n"))
-		if *noFail {
-			return 0
-		}
-		return 1
+		return writeError(stdout, strings.Join(errText, "\n"), *noFail)
 	}
 
 	opts.slackClient = newClient(opts.token)
 
 	output, err := Do(opts)
 	if err != nil {
-		fmt.Fprintln(stdout, err.Error())
-		if *noFail {
-			return 0
-		}
-		return 1
+		return writeError(stdout, err.Error(), *noFail)
 	}
 
-	b, err := json.Marshal(output)
-	if err != nil {
-		fmt.Fprintln(stdout, err.Error())
-		if *noFail {
-			return 0
-		}
-		return 1
+	// 投稿は完了しているため、書き込み失敗で失敗のexit codeを返すとリトライ時に二重投稿になる
+	if err := json.NewEncoder(stdout).Encode(output); err != nil {
+		fmt.Fprintf(stderr, "failed to write output: %s\n", err)
 	}
-
-	fmt.Fprintf(stdout, "%s", b)
 	return 0
 }
 
@@ -230,55 +226,55 @@ func Do(opts *Options) (*CliOutput, error) {
 	var err error
 	var output *CliOutput
 
-	w := opts.stdout
+	w := opts.infoOut
 	if w == nil {
-		w = os.Stdout
+		w = os.Stderr
 	}
 
 	switch opts.mode {
 	case "text":
-		// 3000文字以上は自動でスニペットにする
+		// 3000バイトを超えると自動でスニペットにする（Slackの上限は3000文字だが、判定はバイト数で行う）
 		// https://api.slack.com/reference/block-kit/blocks#section_fields
 		if 3000 < len(opts.text) {
 			opts.snippetMode = true
-			fmt.Fprintln(w, "[INFO] text length exceed limits (3000 characters), upload snippets.")
+			fmt.Fprintln(w, "[INFO] text length exceed limits (3000 bytes), upload snippets.")
 		}
 
 		if opts.snippetMode {
 			output, err = postFile(opts.slackClient, opts.postOpts, strings.NewReader(opts.text), "", "", len(opts.text))
 			if err != nil {
-				return nil, errors.Wrap(err, "error postFile")
+				return nil, errors.Wrap(err, "failed to upload file")
 			}
 		} else {
 			output, err = postMessage(opts.slackClient, opts.postOpts, opts.text)
 			if err != nil {
-				return nil, errors.Wrap(err, "error: postMessage")
+				return nil, errors.Wrap(err, "failed to post message")
 			}
 		}
 	case "blocks":
 		blocks := slack.Blocks{}
 		if err := blocks.UnmarshalJSON([]byte(opts.blocks)); err != nil {
-			return nil, errors.Wrap(err, "error: failed blocks.UnmarshalJSON")
+			return nil, errors.Wrap(err, "failed to parse blocks json")
 		}
 		output, err = postBlocks(opts.slackClient, opts.postOpts, blocks)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error postBlocks %s", opts.filepath)
+			return nil, errors.Wrap(err, "failed to post blocks")
 		}
 
 	case "file":
 		if opts.filepath != "" {
 			file, err := os.Open(opts.filepath)
 			if err != nil {
-				return nil, errors.Wrapf(err, "error open file: %s", opts.filepath)
+				return nil, errors.Wrapf(err, "failed to open file: %s", opts.filepath)
 			}
 			filename := filepath.Base(opts.filepath)
 			st, err := os.Stat(opts.filepath)
 			if err != nil {
-				return nil, errors.Wrapf(err, "error stat file: %s", opts.filepath)
+				return nil, errors.Wrapf(err, "failed to stat file: %s", opts.filepath)
 			}
 			output, err = postFile(opts.slackClient, opts.postOpts, file, filename, "", int(st.Size()))
 			if err != nil {
-				return nil, errors.Wrapf(err, "error postFile %s", opts.filepath)
+				return nil, errors.Wrapf(err, "failed to upload file: %s", opts.filepath)
 			}
 		}
 	}
@@ -316,7 +312,7 @@ func postMessage(client SlackClient, postOpts *PostOptions, text string) (*CliOu
 		opts...,
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "error postMessage")
+		return nil, err
 	}
 
 	output := &CliOutput{
@@ -337,7 +333,7 @@ func postBlocks(client SlackClient, postOpts *PostOptions, blocks slack.Blocks) 
 		opts...,
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "error postMessage")
+		return nil, err
 	}
 
 	output := &CliOutput{
@@ -361,9 +357,11 @@ func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, f
 		ThreadTimestamp: postOpts.threadTs,
 	}
 	if _, err := client.UploadFile(fups); err != nil {
-		return nil, errors.Wrap(err, "error postFile")
+		return nil, err
 	}
 	output := &CliOutput{
+		// UploadFile のレスポンス(FileSummary)にはchannel情報が含まれないため、
+		// リクエスト時点のchannelをそのまま使う
 		Channel: postOpts.channel,
 		// Timestamp: UploadFileはtimestampを取得できない
 	}
