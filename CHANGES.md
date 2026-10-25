@@ -20,6 +20,8 @@
   `$HOME` (`%USERPROFILE%` on Windows) instead of the user database, and a
   failure is reported via the
   `error` key like other failures, so `--nofail` applies to it.
+- Positional arguments were previously ignored silently. They are now an
+  error.
 - Success output previously had no trailing newline; it now does.
 - `timestamp` previously appeared as `"timestamp":""` when unavailable; the
   key is now omitted entirely. As a result, `jq -r .timestamp` prints

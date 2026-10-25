@@ -361,6 +361,8 @@ func Test_runWith_deleteMessage_rejectedInput_doesNotDelete(t *testing.T) {
 		{"version takes precedence", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--version"}, 0},
 		{"help takes precedence", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--help"}, 0},
 		{"completion takes precedence", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--completion", "zsh"}, 0},
+		{"version takes precedence over extra url", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, url, "--version"}, 0},
+		{"completion takes precedence over extra url", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, url, "--completion", "zsh"}, 0},
 		{"conflicting option", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--text", "hello"}, 1},
 		{"extra url", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, url}, 1},
 		{"repeated delete", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--delete", url}, 1},
@@ -464,7 +466,18 @@ func Test_runWith_errorCases(t *testing.T) {
 		{
 			title:      "delete with extra url",
 			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--delete", "https://example.slack.com/archives/C123/p1234567890123456", "https://example.slack.com/archives/C123/p1234567890999999"},
-			wantSubstr: "--delete takes exactly one url, got extra arguments: https://example.slack.com/archives/C123/p1234567890999999",
+			wantSubstr: "unexpected arguments: https://example.slack.com/archives/C123/p1234567890999999",
+		},
+		{
+			title:      "text with extra argument",
+			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--text", "hello", "world"},
+			wantSubstr: "unexpected arguments: world",
+		},
+		{
+			// alias sqp='slack-quickpost --text' で sqp --delete URL と打った場合。--text が "--delete" を値として消費し、URL が位置引数に残る
+			title:      "flag consumed as text value",
+			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--text", "--delete", "https://example.slack.com/archives/C123/p1234567890123456"},
+			wantSubstr: "unexpected arguments: https://example.slack.com/archives/C123/p1234567890123456",
 		},
 		{
 			title:      "delete specified twice",

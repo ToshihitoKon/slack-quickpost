@@ -227,6 +227,11 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		return 0
 	}
 
+	// 位置引数は使わないが、黙って捨てると、値を取るフラグが次のフラグを値として食った書き間違い（--text --delete URL）に気づけない
+	if 0 < fs.NArg() {
+		errText = append(errText, fmt.Sprintf("unexpected arguments: %s", strings.Join(fs.Args(), " ")))
+	}
+
 	opts := &Options{
 		infoOut:     stderr,
 		snippetMode: *snippetMode,
@@ -260,9 +265,6 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		}
 		if 1 < optDelete.count {
 			errText = append(errText, "--delete can be specified only once")
-		}
-		if 0 < fs.NArg() {
-			errText = append(errText, fmt.Sprintf("--delete takes exactly one url, got extra arguments: %s", strings.Join(fs.Args(), " ")))
 		}
 		target, err := parseMessageURL(optDelete.value)
 		if err != nil {

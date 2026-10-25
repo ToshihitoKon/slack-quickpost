@@ -266,3 +266,9 @@ See [CHANGES.md](CHANGES.md) for breaking changes in v1.0.
 --username string    user name
 --version            print version
 ```
+
+Positional arguments are not accepted; any positional argument is an
+error. This catches a flag taken as the value of the preceding one when it
+leaves an argument behind (e.g. `--text --delete URL`, where `--delete`
+becomes the text and `URL` is left over). A flag taken as a value with
+nothing left over (e.g. `--text --delete`) is still posted as text.
