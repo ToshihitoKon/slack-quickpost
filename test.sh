@@ -1,77 +1,74 @@
 #!/usr/bin/env bash
-set -xeu
+set -euxo pipefail
 
-binpath="/tmp/slack-quickpost-bin"
-go build -o $binpath ./...
+tempdir=$(mktemp -d)
+trap 'rm -rf "$tempdir"' EXIT
 
-testProfile=test-profile
-slackToken=$(yq -r '.token' ~/.config/slack-quickpost/${testProfile}.yaml)
-channelID=$(yq -r '.channel' ~/.config/slack-quickpost/${testProfile}.yaml)
+binpath="${tempdir}/slack-quickpost-bin"
+go build -o "$binpath" .
+
+testProfile=${SLACK_QP_PROFILE:-"test-profile"}
+profilePath="${HOME}/.config/slack-quickpost/${testProfile}.yaml"
+slackToken=$(yq -r '.token' "$profilePath")
+channelID=$(yq -r '.channel' "$profilePath")
 iconUrl="https://user-images.githubusercontent.com/10419053/132874304-3c6397b5-e084-4476-a376-e3c7a941039c.png"
 
+post() {
+    "$binpath" --channel "$channelID" "$@"
+}
+
 # print version
-$binpath --version
+"$binpath" --version
 
 unset SLACK_TOKEN
 # token and channel given by Profile
-$binpath --profile ${testProfile} \
-    --text "case: token and channel given profile" \
+"$binpath" --profile "$testProfile" \
+    --text "case: token and channel given profile"
 
-export SLACK_QUICKPOST_PROFILE=${testProfile}
-$binpath \
-    --text "case: token and channel given profile 2" \
-unset SLACK_QUICKPOST_PROFILE
+SLACK_QUICKPOST_PROFILE=$testProfile "$binpath" \
+    --text "case: token and channel given profile 2"
 
 # text / token given as option
-$binpath --channel $channelID \
-    --text "case: token given command option, username and icon not given" \
-    --token="${slackToken}"
+post --text "case: token given command option, username and icon not given" \
+    --token "$slackToken"
 
 export SLACK_TOKEN=$slackToken
 
-$binpath --channel $channelID \
-    --text "case: token given environment variable, username given" \
+post --text "case: token given environment variable, username given" \
     --username "given username 1"
 
-$binpath --channel $channelID \
-    --text "given icon with emoji" \
+post --text "given icon with emoji" \
     --username "given username_2" \
     --icon "thumbsup"
 
-$binpath --channel $channelID \
-    --text "given icon with image url" \
+post --text "given icon with image url" \
     --username "given username 3" \
-    --icon-url $iconUrl
+    --icon-url "$iconUrl"
 
-$binpath --channel $channelID \
-    --text "case post text with snippet option\nsnippet name become timestamp" \
+post --text "case post text with snippet option\nsnippet name become timestamp" \
     --username "given username 4" \
     --icon "tada" \
     --snippet
 
-cat << EOS > /tmp/slack-quickpost-test1.txt
+cat << EOS > "${tempdir}/slack-quickpost-test1.txt"
 case given text filepath.
 EOS
-$binpath --channel $channelID \
-    --textfile /tmp/slack-quickpost-test1.txt
+post --textfile "${tempdir}/slack-quickpost-test1.txt"
 
-cat << EOS > /tmp/slack-quickpost-test2.txt
+cat << EOS > "${tempdir}/slack-quickpost-test2.txt"
 case given texitfile path as file.
 post file mode, ignore username and icon.
 EOS
-$binpath --channel $channelID \
-    --username "ignored username" \
+post --username "ignored username" \
     --icon "cry" \
-    --file /tmp/slack-quickpost-test2.txt
+    --file "${tempdir}/slack-quickpost-test2.txt"
 
-wget -O /tmp/slack-quickpost-test.jpg $iconUrl
-$binpath --channel $channelID  \
-    --username "ignored username" \
+curl -fsSL -o "${tempdir}/slack-quickpost-test.jpg" "$iconUrl"
+post --username "ignored username" \
     --icon "cry" \
-    --file /tmp/slack-quickpost-test.jpg
+    --file "${tempdir}/slack-quickpost-test.jpg"
 
 # BlockKit json
-$binpath --channel $channelID  \
-    --username "BlockKit json" \
+post --username "BlockKit json" \
     --icon "blush" \
     --blocks '[{"type":"section","text":{"type":"mrkdwn","text":"*Post BlockKit*"}}]'
