@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euxo pipefail
+set -euo pipefail
 
 tempdir=$(mktemp -d)
 trap 'rm -rf "$tempdir"' EXIT
@@ -59,7 +59,7 @@ EOS
 post --textfile "${tempdir}/slack-quickpost-test1.txt"
 
 cat << EOS > "${tempdir}/slack-quickpost-test2.txt"
-case given texitfile path as file.
+case given textfile path as file.
 post file mode, ignore username and icon.
 EOS
 post --username "ignored username" \
