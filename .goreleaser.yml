@@ -21,5 +21,7 @@ builds:
       - -s -w
 archives:
   - name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+changelog:
+  use: github-native
 release:
   prerelease: auto
