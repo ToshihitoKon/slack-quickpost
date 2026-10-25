@@ -25,6 +25,15 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
 
+  goreleaser-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: check
+
   embed-binary:
     runs-on: ubuntu-latest
     steps:
