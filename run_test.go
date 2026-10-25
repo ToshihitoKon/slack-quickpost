@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -134,6 +136,109 @@ func Test_runWith_postFile(t *testing.T) {
 	want := "{\"channel\":\"C123\"}\n"
 	if stdout != want {
 		t.Errorf("stdout = %q, want %q", stdout, want)
+	}
+}
+
+// os.UserHomeDir は Windows では USERPROFILE を見るため、HOME と合わせて差し替える
+func setHome(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+}
+
+// writeProfile はホームディレクトリを一時ディレクトリに差し替え、その下にプロファイルを置く
+func writeProfile(t *testing.T, name, content string) {
+	t.Helper()
+	home := t.TempDir()
+	setHome(t, home)
+	dir := filepath.Join(home, ".config", "slack-quickpost")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("failed to create profile dir: %s", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name+".yaml"), []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to write profile: %s", err)
+	}
+}
+
+func Test_runWith_profile_suppliesTokenAndChannel(t *testing.T) {
+	for _, profileName := range []string{"test", "test.yaml"} {
+		t.Run(profileName, func(t *testing.T) {
+			t.Setenv("SLACK_TOKEN", "")
+			t.Setenv("SLACK_QUICKPOST_PROFILE", "")
+			writeProfile(t, "test", "token: xoxb-profile\nchannel: CPROFILE\n")
+
+			var gotToken string
+			var outBuf bytes.Buffer
+			args := []string{"slack-quickpost", "--profile", profileName, "--text", "hello"}
+			code := runWith(args, &outBuf, io.Discard, func(token string) SlackClient {
+				gotToken = token
+				return NewSlackMockClient()
+			})
+
+			if code != 0 {
+				t.Fatalf("exit code = %d, want 0 (stdout = %q)", code, outBuf.String())
+			}
+			if gotToken != "xoxb-profile" {
+				t.Errorf("token = %q, want %q", gotToken, "xoxb-profile")
+			}
+			want := "{\"channel\":\"CPROFILE\",\"timestamp\":\"1234567890.123456\"}\n"
+			if outBuf.String() != want {
+				t.Errorf("stdout = %q, want %q", outBuf.String(), want)
+			}
+		})
+	}
+}
+
+func Test_runWith_profileNotFound_returnsError(t *testing.T) {
+	t.Setenv("SLACK_TOKEN", "")
+	t.Setenv("SLACK_QUICKPOST_PROFILE", "")
+	setHome(t, t.TempDir())
+
+	args := []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--profile", "missing", "--text", "hello"}
+	code, stdout, _ := runWithMock(args)
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	assertStdoutIsErrorJSON(t, stdout, "failed to read profile")
+}
+
+func Test_runWith_profileWithoutHome_returnsError(t *testing.T) {
+	tests := []struct {
+		title     string
+		extraArgs []string
+		wantCode  int
+	}{
+		{"without nofail", nil, 1},
+		{"with nofail", []string{"--nofail"}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.title, func(t *testing.T) {
+			t.Setenv("SLACK_TOKEN", "")
+			t.Setenv("SLACK_QUICKPOST_PROFILE", "")
+			setHome(t, "")
+
+			args := append([]string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--profile", "test", "--text", "hello"}, tt.extraArgs...)
+			code, stdout, _ := runWithMock(args)
+
+			if code != tt.wantCode {
+				t.Errorf("exit code = %d, want %d", code, tt.wantCode)
+			}
+			assertStdoutIsErrorJSON(t, stdout, "failed to read profile test")
+		})
+	}
+}
+
+func Test_runWith_withoutProfile_doesNotNeedHome(t *testing.T) {
+	t.Setenv("SLACK_TOKEN", "")
+	t.Setenv("SLACK_QUICKPOST_PROFILE", "")
+	setHome(t, "")
+
+	args := []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--text", "hello"}
+	code, stdout, _ := runWithMock(args)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stdout = %q)", code, stdout)
 	}
 }
 
@@ -323,7 +428,7 @@ func Test_runWith_errorCases(t *testing.T) {
 		{
 			title:      "no mode specified",
 			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123"},
-			wantSubstr: "--text option is required",
+			wantSubstr: "one of --text, --textfile, --blocks or --file is required",
 		},
 		{
 			title:      "invalid blocks json",
@@ -333,7 +438,7 @@ func Test_runWith_errorCases(t *testing.T) {
 		{
 			title:      "textfile not found",
 			args:       []string{"slack-quickpost", "--token", "xoxb-test", "--channel", "C123", "--textfile", "tests/not-exist.txt"},
-			wantSubstr: "failed read text file",
+			wantSubstr: "failed to read text file",
 		},
 		{
 			title:      "file not found",

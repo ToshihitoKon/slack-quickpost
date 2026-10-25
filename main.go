@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
@@ -238,19 +237,13 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 			threadTs:  *threadTs,
 		},
 	}
-	usr, err := user.Current()
-	if err != nil {
-		return writeError(stdout, fmt.Sprintf("user.Current(): %s", err), *noFail)
-	}
-
-	profileName := strGetFirstOne(*optProfile, envProfile)
-
-	var profile = &Profile{}
-	if profileName != "" {
-		profPath := profilePath(usr.HomeDir, profileName)
-		profile, err = parseProfile(profPath)
+	profile := &Profile{}
+	if profileName := strGetFirstOne(*optProfile, envProfile); profileName != "" {
+		loaded, err := loadProfile(profileName)
 		if err != nil {
-			errText = append(errText, fmt.Sprintf("failed read profile %s. %s", profPath, err.Error()))
+			errText = append(errText, err.Error())
+		} else {
+			profile = loaded
 		}
 	}
 
@@ -293,7 +286,7 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		case *optTextFile != "":
 			bytes, err := os.ReadFile(*optTextFile)
 			if err != nil {
-				errText = append(errText, fmt.Sprintf("failed read text file: %s", err))
+				errText = append(errText, fmt.Sprintf("failed to read text file: %s", err))
 			}
 			opts.text = string(bytes)
 			opts.mode = modeText
@@ -301,7 +294,7 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 			opts.filepath = *optFile
 			opts.mode = modeFile
 		default:
-			errText = append(errText, "--text option is required")
+			errText = append(errText, "one of --text, --textfile, --blocks or --file is required")
 		}
 	}
 

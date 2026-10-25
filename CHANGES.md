@@ -13,9 +13,13 @@
   `error: failed blocks.UnmarshalJSON` → `failed to parse blocks json`).
   Detect failures by the exit code or the presence of the `error` key
   instead of matching message text.
-- A `user.Current()` failure was previously logged to stderr and always
-  exited with code `1`. It is now reported via the `error` key like other
-  failures, so `--nofail` applies to it.
+- The home directory was previously looked up with `user.Current()` on
+  every run, and a lookup failure was logged to stderr and always exited
+  with code `1`, even without a profile. It is now looked up only when a
+  profile is used (`--profile` / `SLACK_QUICKPOST_PROFILE`), taken from
+  `$HOME` (`%USERPROFILE%` on Windows) instead of the user database, and a
+  failure is reported via the
+  `error` key like other failures, so `--nofail` applies to it.
 - Success output previously had no trailing newline; it now does.
 - `timestamp` previously appeared as `"timestamp":""` when unavailable; the
   key is now omitted entirely. As a result, `jq -r .timestamp` prints
