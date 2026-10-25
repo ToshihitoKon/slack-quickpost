@@ -12,12 +12,13 @@ func TestDo(t *testing.T) {
 	}
 
 	tests := []struct {
-		title       string
-		text        string
-		mode        string
-		snippetMode bool
-		filepath    string
-		expect      expect
+		title        string
+		text         string
+		mode         string
+		snippetMode  bool
+		filepath     string
+		deleteTarget MessageRef
+		expect       expect
 	}{
 		{
 			title:       "normal text",
@@ -59,6 +60,15 @@ func TestDo(t *testing.T) {
 				contentType: "file",
 			},
 		},
+		{
+			title:        "delete message",
+			mode:         "delete",
+			deleteTarget: MessageRef{channel: "C123", timestamp: "1700000000.000200"},
+			expect: expect{
+				success:     true,
+				contentType: "delete",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -69,9 +79,10 @@ func TestDo(t *testing.T) {
 				text:        tt.text,
 				mode:        tt.mode,
 
-				token:       "testtoken",
-				filepath:    tt.filepath,
-				snippetMode: tt.snippetMode,
+				token:        "testtoken",
+				filepath:     tt.filepath,
+				snippetMode:  tt.snippetMode,
+				deleteTarget: tt.deleteTarget,
 				postOpts: &PostOptions{
 					username:  "test username",
 					channel:   "test channel",
@@ -90,6 +101,53 @@ func TestDo(t *testing.T) {
 
 			if client.ContentType != tt.expect.contentType {
 				t.Errorf("error: contentType (want:%v got:%v)", tt.expect.contentType, client.ContentType)
+			}
+		})
+	}
+}
+
+func Test_parseMessageURL_validPermalink_returnsChannelAndTimestamp(t *testing.T) {
+	tests := []struct {
+		title string
+		url   string
+		want  MessageRef
+	}{
+		{"permalink", "https://example.slack.com/archives/C0123ABCD/p1234567890123456", MessageRef{channel: "C0123ABCD", timestamp: "1234567890.123456"}},
+		{"thread reply permalink", "https://example.slack.com/archives/C0123ABCD/p1234567890123456?thread_ts=1234567890.000100&cid=C0123ABCD", MessageRef{channel: "C0123ABCD", timestamp: "1234567890.123456"}},
+		{"DM permalink", "https://example.slack.com/archives/D0123ABCD/p1234567890123456", MessageRef{channel: "D0123ABCD", timestamp: "1234567890.123456"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.title, func(t *testing.T) {
+			got, err := parseMessageURL(tt.url)
+			if err != nil {
+				t.Fatalf("parseMessageURL(%q) error = %s", tt.url, err)
+			}
+			if got != tt.want {
+				t.Errorf("parseMessageURL(%q) = %+v, want %+v", tt.url, got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_parseMessageURL_invalidURL_returnsError(t *testing.T) {
+	tests := []struct {
+		title string
+		url   string
+	}{
+		{"empty", ""},
+		{"unparsable url", "://example.slack.com/archives/C0123ABCD/p1234567890123456"},
+		{"channel id only", "C0123ABCD"},
+		{"channel url without message", "https://example.slack.com/archives/C0123ABCD"},
+		{"missing p prefix", "https://example.slack.com/archives/C0123ABCD/1234567890123456"},
+		{"not archives path", "https://app.slack.com/client/T0123ABCD/C0123ABCD"},
+		{"too short timestamp", "https://example.slack.com/archives/C0123ABCD/p123456"},
+		{"non digit timestamp", "https://example.slack.com/archives/C0123ABCD/p1234567890abcdef"},
+		{"trailing path segment", "https://example.slack.com/archives/C0123ABCD/p1234567890123456/extra"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.title, func(t *testing.T) {
+			if got, err := parseMessageURL(tt.url); err == nil {
+				t.Errorf("parseMessageURL(%q) = %+v, want error", tt.url, got)
 			}
 		})
 	}

@@ -72,3 +72,11 @@ post --username "ignored username" \
 post --username "BlockKit json" \
     --icon "blush" \
     --blocks '[{"type":"section","text":{"type":"mrkdwn","text":"*Post BlockKit*"}}]'
+
+# delete message by permalink
+# permalink のホスト部は削除対象の特定に使われないため、slack.com で組み立てる
+postOutput=$(post --text "case: this message will be deleted")
+deleteChannel=$(echo "$postOutput" | yq -r '.channel')
+deleteTs=$(echo "$postOutput" | yq -r '.timestamp')
+deleteOutput=$("$binpath" --delete "https://slack.com/archives/${deleteChannel}/p${deleteTs//./}")
+[ "$deleteOutput" = "$postOutput" ]
