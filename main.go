@@ -2,9 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"os/user"
@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/slack-go/slack"
 	flag "github.com/spf13/pflag"
 )
@@ -41,6 +40,13 @@ type CliOutput struct {
 	Timestamp string `json:"timestamp,omitempty"`
 	Error     string `json:"error,omitempty"`
 }
+
+const (
+	modeText   = "text"
+	modeBlocks = "blocks"
+	modeFile   = "file"
+	modeDelete = "delete"
+)
 
 type Options struct {
 	slackClient SlackClient
@@ -85,7 +91,7 @@ func parseMessageURL(rawURL string) (MessageRef, error) {
 		m = permalinkPathPattern.FindStringSubmatch(u.Path)
 	}
 	if m == nil {
-		return MessageRef{}, errors.Errorf("invalid message url (want a permalink like %s): %s", permalinkFormat, rawURL)
+		return MessageRef{}, fmt.Errorf("invalid message url (want a permalink like %s): %s", permalinkFormat, rawURL)
 	}
 	return MessageRef{
 		channel:   m[1],
@@ -174,7 +180,7 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		snippetMode = fs.Bool("snippet", false, "post text as snippet")
 
 		// mode: post file
-		filepath = fs.String("file", "", "post file path")
+		optFile = fs.String("file", "", "post file path")
 
 		// mode: post blocks json
 		optBlocks = fs.String("blocks", "", "post BlockKit json")
@@ -225,7 +231,6 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 	opts := &Options{
 		infoOut:     stderr,
 		snippetMode: *snippetMode,
-		filepath:    *filepath,
 		postOpts: &PostOptions{
 			username:  *username,
 			iconEmoji: *iconEmoji,
@@ -256,7 +261,7 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 
 	// delete mode は channel を URL から取るため、profile や焼き込みの channel は使わない
 	if 0 < optDelete.count {
-		opts.mode = "delete"
+		opts.mode = modeDelete
 		if conflicting := flagsConflictingWithDelete(fs); 0 < len(conflicting) {
 			errText = append(errText, fmt.Sprintf("--delete cannot be used with %s", strings.Join(conflicting, ", ")))
 		}
@@ -280,21 +285,21 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 		// post mode
 		switch {
 		case *optText != "":
-			opts.text = strings.Replace(*optText, "\\n", "\n", -1)
-			opts.mode = "text"
+			opts.text = strings.ReplaceAll(*optText, "\\n", "\n")
+			opts.mode = modeText
 		case *optBlocks != "":
 			opts.blocks = *optBlocks
-			opts.mode = "blocks"
+			opts.mode = modeBlocks
 		case *optTextFile != "":
-			bytes, err := ioutil.ReadFile(*optTextFile)
+			bytes, err := os.ReadFile(*optTextFile)
 			if err != nil {
 				errText = append(errText, fmt.Sprintf("failed read text file: %s", err))
 			}
 			opts.text = string(bytes)
-			opts.mode = "text"
-		case *filepath != "":
-			opts.filepath = *filepath
-			opts.mode = "file"
+			opts.mode = modeText
+		case *optFile != "":
+			opts.filepath = *optFile
+			opts.mode = modeFile
 		default:
 			errText = append(errText, "--text option is required")
 		}
@@ -319,69 +324,64 @@ func runWith(args []string, stdout, stderr io.Writer, newClient func(token strin
 }
 
 func Do(opts *Options) (*CliOutput, error) {
-	var err error
-	var output *CliOutput
-
-	w := opts.infoOut
-	if w == nil {
-		w = os.Stderr
-	}
-
 	switch opts.mode {
-	case "text":
+	case modeText:
 		// 3000バイトを超えると自動でスニペットにする（Slackの上限は3000文字だが、判定はバイト数で行う）
 		// https://api.slack.com/reference/block-kit/blocks#section_fields
-		if 3000 < len(opts.text) {
-			opts.snippetMode = true
-			fmt.Fprintln(w, "[INFO] text length exceed limits (3000 bytes), upload snippets.")
+		isOverLimit := 3000 < len(opts.text)
+		if isOverLimit {
+			fmt.Fprintln(opts.infoOut, "[INFO] text length exceed limits (3000 bytes), upload snippets.")
 		}
 
-		if opts.snippetMode {
-			output, err = postFile(opts.slackClient, opts.postOpts, strings.NewReader(opts.text), "", "", len(opts.text))
+		if opts.snippetMode || isOverLimit {
+			output, err := postFile(opts.slackClient, opts.postOpts, strings.NewReader(opts.text), "", len(opts.text))
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to upload file")
+				return nil, fmt.Errorf("failed to upload file: %w", err)
 			}
-		} else {
-			output, err = postMessage(opts.slackClient, opts.postOpts, opts.text)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to post message")
-			}
+			return output, nil
 		}
-	case "blocks":
+		output, err := postMessage(opts.slackClient, opts.postOpts, slack.MsgOptionText(opts.text, false))
+		if err != nil {
+			return nil, fmt.Errorf("failed to post message: %w", err)
+		}
+		return output, nil
+
+	case modeBlocks:
 		blocks := slack.Blocks{}
 		if err := blocks.UnmarshalJSON([]byte(opts.blocks)); err != nil {
-			return nil, errors.Wrap(err, "failed to parse blocks json")
+			return nil, fmt.Errorf("failed to parse blocks json: %w", err)
 		}
-		output, err = postBlocks(opts.slackClient, opts.postOpts, blocks)
+		output, err := postMessage(opts.slackClient, opts.postOpts, slack.MsgOptionBlocks(blocks.BlockSet...))
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to post blocks")
+			return nil, fmt.Errorf("failed to post blocks: %w", err)
 		}
+		return output, nil
 
-	case "file":
-		if opts.filepath != "" {
-			file, err := os.Open(opts.filepath)
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to open file: %s", opts.filepath)
-			}
-			filename := filepath.Base(opts.filepath)
-			st, err := os.Stat(opts.filepath)
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to stat file: %s", opts.filepath)
-			}
-			output, err = postFile(opts.slackClient, opts.postOpts, file, filename, "", int(st.Size()))
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to upload file: %s", opts.filepath)
-			}
-		}
-
-	case "delete":
-		output, err = deleteMessage(opts.slackClient, opts.deleteTarget)
+	case modeFile:
+		file, err := os.Open(opts.filepath)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to delete message")
+			return nil, fmt.Errorf("failed to open file: %s: %w", opts.filepath, err)
 		}
+		defer file.Close()
+		st, err := file.Stat()
+		if err != nil {
+			return nil, fmt.Errorf("failed to stat file: %s: %w", opts.filepath, err)
+		}
+		output, err := postFile(opts.slackClient, opts.postOpts, file, filepath.Base(opts.filepath), int(st.Size()))
+		if err != nil {
+			return nil, fmt.Errorf("failed to upload file: %s: %w", opts.filepath, err)
+		}
+		return output, nil
+
+	case modeDelete:
+		output, err := deleteMessage(opts.slackClient, opts.deleteTarget)
+		if err != nil {
+			return nil, fmt.Errorf("failed to delete message: %w", err)
+		}
+		return output, nil
 	}
 
-	return output, nil
+	return nil, fmt.Errorf("unknown mode: %q", opts.mode)
 }
 
 func (p *PostOptions) getMsgOptions() []slack.MsgOption {
@@ -404,36 +404,11 @@ func (p *PostOptions) getMsgOptions() []slack.MsgOption {
 	return opts
 }
 
-func postMessage(client SlackClient, postOpts *PostOptions, text string) (*CliOutput, error) {
-	opts := []slack.MsgOption{}
-	opts = append(opts, postOpts.getMsgOptions()...)
-	opts = append(opts, slack.MsgOptionText(text, false))
+// content には本文（slack.MsgOptionText）か BlockKit（slack.MsgOptionBlocks）を渡す
+func postMessage(client SlackClient, postOpts *PostOptions, content slack.MsgOption) (*CliOutput, error) {
+	opts := append(postOpts.getMsgOptions(), content)
 
-	postedChannel, ts, err := client.PostMessage(
-		postOpts.channel,
-		opts...,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	output := &CliOutput{
-		Channel:   postedChannel,
-		Timestamp: ts,
-	}
-
-	return output, nil
-}
-
-func postBlocks(client SlackClient, postOpts *PostOptions, blocks slack.Blocks) (*CliOutput, error) {
-	opts := []slack.MsgOption{}
-	opts = append(opts, postOpts.getMsgOptions()...)
-	opts = append(opts, slack.MsgOptionBlocks(blocks.BlockSet...))
-
-	postedChannel, ts, err := client.PostMessage(
-		postOpts.channel,
-		opts...,
-	)
+	postedChannel, ts, err := client.PostMessage(postOpts.channel, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -445,16 +420,14 @@ func postBlocks(client SlackClient, postOpts *PostOptions, blocks slack.Blocks) 
 	return output, nil
 }
 
-func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, filename, comment string, size int) (*CliOutput, error) {
-	postTime := time.Now()
+func postFile(client SlackClient, postOpts *PostOptions, fileReader io.Reader, filename string, size int) (*CliOutput, error) {
 	if filename == "" {
-		filename = fmt.Sprintf("%s.txt", postTime.Format("20060102_150405.999999"))
+		filename = fmt.Sprintf("%s.txt", time.Now().Format("20060102_150405.999999"))
 	}
 	fups := slack.UploadFileParameters{
 		Filename:        filename,
 		FileSize:        size,
 		Reader:          fileReader,
-		InitialComment:  comment,
 		Channel:         postOpts.channel,
 		ThreadTimestamp: postOpts.threadTs,
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"strings"
 	"testing"
 )
@@ -23,7 +24,7 @@ func TestDo(t *testing.T) {
 		{
 			title:       "normal text",
 			text:        "",
-			mode:        "text",
+			mode:        modeText,
 			snippetMode: false,
 			expect: expect{
 				success:     true,
@@ -33,7 +34,7 @@ func TestDo(t *testing.T) {
 		{
 			title:       "snippet mode",
 			text:        strings.Repeat("a", 3000),
-			mode:        "text",
+			mode:        modeText,
 			snippetMode: true,
 			expect: expect{
 				success:     true,
@@ -41,9 +42,9 @@ func TestDo(t *testing.T) {
 			},
 		},
 		{
-			title:       "snippet (text over 3001 charactor)",
+			title:       "snippet (text over 3000 bytes)",
 			text:        strings.Repeat("a", 3001),
-			mode:        "text",
+			mode:        modeText,
 			snippetMode: false,
 			expect: expect{
 				success:     true,
@@ -53,7 +54,7 @@ func TestDo(t *testing.T) {
 		{
 			title:       "upload file",
 			snippetMode: true,
-			mode:        "file",
+			mode:        modeFile,
 			filepath:    "tests/upload.txt",
 			expect: expect{
 				success:     true,
@@ -62,11 +63,19 @@ func TestDo(t *testing.T) {
 		},
 		{
 			title:        "delete message",
-			mode:         "delete",
+			mode:         modeDelete,
 			deleteTarget: MessageRef{channel: "C123", timestamp: "1700000000.000200"},
 			expect: expect{
 				success:     true,
 				contentType: "delete",
+			},
+		},
+		{
+			title: "unknown mode",
+			mode:  "",
+			expect: expect{
+				success:     false,
+				contentType: "",
 			},
 		},
 	}
@@ -76,6 +85,7 @@ func TestDo(t *testing.T) {
 			client := NewSlackMockClient()
 			opts := &Options{
 				slackClient: client,
+				infoOut:     io.Discard,
 				text:        tt.text,
 				mode:        tt.mode,
 
