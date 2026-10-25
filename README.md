@@ -16,12 +16,12 @@ make Slack App and get OAuth token.
 
 ```yaml
 jobs:
-  using-slack-quikpost:
+  using-slack-quickpost:
     runs-on: ubuntu-latest
     steps:
       - uses: ToshihitoKon/slack-quickpost@v1
         with:
-          version: 0.8.0
+          version: 0.10.0
 
 ```
 
@@ -66,6 +66,16 @@ slack-quickpost --profile profile-name --text [TEXT]
 The `.yaml` extension may be included in the profile name
 (e.g. `--profile profile-name.yaml`).
 
+#### Precedence
+
+When values come from several sources, the first one found is used:
+
+- token: `--token` → `SLACK_TOKEN` → profile → embedded value
+- channel: `--channel` → profile → embedded value
+
+A profile does not override `SLACK_TOKEN`: with `SLACK_TOKEN` exported,
+`--profile` only supplies the channel.
+
 #### Embedded binary
 
 Build a `slack-quickpost` binary with a token and default channel baked in, so
@@ -89,8 +99,8 @@ slack-quickpost-embed \
 # token / channel can also come from environment variables
 SLACK_TOKEN=xoxb-XXX SLACK_CHANNEL=[CHANNEL_ID] slack-quickpost-embed --output ./slack-quickpost
 
-# pin the version to embed
-slack-quickpost-embed --token xoxb-XXX --channel [CHANNEL_ID] --version v0.8.1
+# pin the version to embed (v0.9.1 or later)
+slack-quickpost-embed --token xoxb-XXX --channel [CHANNEL_ID] --version v0.10.0
 
 # build from the current source tree instead of the published module
 slack-quickpost-embed --token xoxb-XXX --channel [CHANNEL_ID] --source local
@@ -109,9 +119,15 @@ slack-quickpost-embed \
 # -> ./slack-quickpost.exe
 ```
 
-The resulting binary uses the embedded token / channel only as a fallback.
-Runtime inputs still take precedence in this order:
-`--token` / `--channel` option → `SLACK_TOKEN` env → profile → embedded value.
+The resulting binary uses the embedded token / channel only as a fallback;
+runtime inputs still take precedence (see [Precedence](#precedence)).
+
+- Use v0.9.1 or later with `--version`. Versions before v0.9.0 have no
+  embedding support: the build still succeeds, but nothing is embedded.
+  v0.9.0 is retracted.
+- The token is stored in the binary as plain text. Anyone who has the
+  binary can extract it and use it with all of its scopes, so embed a
+  token with only the scopes you intend to share.
 
 Options:
 
@@ -129,35 +145,40 @@ Options:
 
 ```
 slack-quickpost \
-  --channel [CANNEL_ID] \
+  --channel [CHANNEL_ID] \
   --text [TEXT] \
   --username [DISPLAY_USERNAME] \
-  --icon [ICON_EMOJI] 
+  --icon [ICON_EMOJI]
 
 # text given textfile path and icon given image url
 slack-quickpost \
-  --channel [CANNEL_ID] \
-  --textfile [FIlEPATH] \
+  --channel [CHANNEL_ID] \
+  --textfile [FILEPATH] \
   --username [DISPLAY_USERNAME] \
-  --icon_url [ICON_IMAGE_URL] 
+  --icon-url [ICON_IMAGE_URL]
 
 # post text as snippet
 slack-quickpost \
-  --channel [CANNEL_ID] \
+  --channel [CHANNEL_ID] \
   --text [TEXT] \
   --snippet
 
 # post BlockKit
 slack-quickpost \
-  --channel [CANNEL_ID] \
-  --block '{"type":"section","text":{"type":"mrkdwn","text":"*Sample BlockKit"}}'
+  --channel [CHANNEL_ID] \
+  --blocks '[{"type":"section","text":{"type":"mrkdwn","text":"*Sample BlockKit*"}}]'
 ```
+
+In `--text`, the two characters `\n` are converted to a newline.
+`--textfile` is posted as is.
+
+`--blocks` takes a JSON array of blocks, not a single block object.
 
 ### post file
 
 ```
 slack-quickpost \
-  --channel [CANNEL_ID] \
+  --channel [CHANNEL_ID] \
   --file [FILE_PATH]
 ```
 
@@ -246,7 +267,7 @@ Exceptions to "stdout is JSON-only":
 
 See [CHANGES.md](CHANGES.md) for breaking changes in v1.0.
 
-## comamnd options
+## command options
 
 ```
 --blocks string      post BlockKit json
