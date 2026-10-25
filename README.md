@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: ToshihitoKon/slack-quickpost@v1
         with:
-          version: 0.10.0
+          version: 1.0.0
 
 ```
 
@@ -100,7 +100,7 @@ slack-quickpost-embed \
 SLACK_TOKEN=xoxb-XXX SLACK_CHANNEL=[CHANNEL_ID] slack-quickpost-embed --output ./slack-quickpost
 
 # pin the version to embed (v0.9.1 or later)
-slack-quickpost-embed --token xoxb-XXX --channel [CHANNEL_ID] --version v0.10.0
+slack-quickpost-embed --token xoxb-XXX --channel [CHANNEL_ID] --version v1.0.0
 
 # build from the current source tree instead of the published module
 slack-quickpost-embed --token xoxb-XXX --channel [CHANNEL_ID] --source local
