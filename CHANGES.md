@@ -1,6 +1,6 @@
 # Changes
 
-## v1.0.0
+## v0.11.0
 
 ### Breaking changes
 
