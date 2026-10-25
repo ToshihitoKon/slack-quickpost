@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: ToshihitoKon/slack-quickpost@v1
         with:
-          version: 1.0.0
+          version: 0.11.0
 
 ```
 
@@ -100,7 +100,7 @@ slack-quickpost-embed \
 SLACK_TOKEN=xoxb-XXX SLACK_CHANNEL=[CHANNEL_ID] slack-quickpost-embed --output ./slack-quickpost
 
 # pin the version to embed (v0.9.1 or later)
-slack-quickpost-embed --token xoxb-XXX --channel [CHANNEL_ID] --version v1.0.0
+slack-quickpost-embed --token xoxb-XXX --channel [CHANNEL_ID] --version v0.11.0
 
 # build from the current source tree instead of the published module
 slack-quickpost-embed --token xoxb-XXX --channel [CHANNEL_ID] --source local
@@ -278,7 +278,7 @@ Exceptions to "stdout is JSON-only":
   code `2`; nothing is printed to stdout, and `--nofail` has no effect on
   this exit code.
 
-See [CHANGES.md](CHANGES.md) for breaking changes in v1.0.
+See [CHANGES.md](CHANGES.md) for breaking changes in v0.11.0.
 
 ## command options
 
