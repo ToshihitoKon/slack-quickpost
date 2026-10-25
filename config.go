@@ -3,6 +3,8 @@ package main
 import (
 	"io"
 	"os"
+	"path"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -10,6 +12,11 @@ import (
 type Profile struct {
 	Token   string `yaml:"token"`
 	Channel string `yaml:"channel"`
+}
+
+// .yml は外さない。プロファイルは .yaml しか読まないため、foo.yml を foo.yaml に読み替えると別のファイルを読むことになる
+func profilePath(homeDir, name string) string {
+	return path.Join(homeDir, ".config", "slack-quickpost", strings.TrimSuffix(name, ".yaml")+".yaml")
 }
 
 func parseProfile(filepath string) (*Profile, error) {

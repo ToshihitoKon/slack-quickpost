@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -253,6 +255,7 @@ func Test_runWith_deleteMessage_rejectedInput_doesNotDelete(t *testing.T) {
 	}{
 		{"version takes precedence", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--version"}, 0},
 		{"help takes precedence", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--help"}, 0},
+		{"completion takes precedence", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--completion", "zsh"}, 0},
 		{"conflicting option", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--text", "hello"}, 1},
 		{"extra url", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, url}, 1},
 		{"repeated delete", []string{"slack-quickpost", "--token", "xoxb-test", "--delete", url, "--delete", url}, 1},
@@ -479,6 +482,74 @@ func Test_runWith_version(t *testing.T) {
 	lines := strings.Split(strings.TrimRight(stdout, "\n"), "\n")
 	if len(lines) != 1 || lines[0] == "" {
 		t.Errorf("stdout = %q, want exactly one non-empty line", stdout)
+	}
+}
+
+func Test_runWith_completion(t *testing.T) {
+	t.Setenv("SLACK_TOKEN", "")
+	t.Setenv("SLACK_QUICKPOST_PROFILE", "")
+
+	for shell, script := range completionScripts {
+		t.Run(shell, func(t *testing.T) {
+			code, stdout, stderr := runWithMock([]string{"slack-quickpost", "--completion", shell})
+			if code != 0 {
+				t.Fatalf("exit code = %d, want 0", code)
+			}
+			if stdout != script {
+				t.Errorf("stdout is not the %s completion script: %q", shell, stdout)
+			}
+			if stderr != "" {
+				t.Errorf("stderr = %q, want empty", stderr)
+			}
+		})
+	}
+}
+
+func Test_runWith_completion_unsupportedShell_isFlagParseError(t *testing.T) {
+	t.Setenv("SLACK_TOKEN", "")
+	t.Setenv("SLACK_QUICKPOST_PROFILE", "")
+
+	code, stdout, stderr := runWithMock([]string{"slack-quickpost", "--completion", "fish", "--nofail"})
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty", stdout)
+	}
+	if !strings.Contains(stderr, "unsupported shell (want bash or zsh)") {
+		t.Errorf("stderr = %q, want to contain \"unsupported shell (want bash or zsh)\"", stderr)
+	}
+}
+
+func matchedFlags(pattern, s string) []string {
+	var flags []string
+	for _, m := range regexp.MustCompile(pattern).FindAllStringSubmatch(s, -1) {
+		flags = append(flags, m[1])
+	}
+	slices.Sort(flags)
+	return slices.Compact(flags)
+}
+
+func Test_completionScripts_listSameFlagsAsUsage(t *testing.T) {
+	t.Setenv("SLACK_TOKEN", "")
+	t.Setenv("SLACK_QUICKPOST_PROFILE", "")
+
+	_, _, usage := runWithMock([]string{"slack-quickpost", "--help"})
+	want := matchedFlags(`(?m)^\s+(?:-\w, )?(--[\w-]+)`, usage)
+	if len(want) == 0 {
+		t.Fatalf("no flags found in usage: %q", usage)
+	}
+
+	bashFlagList := regexp.MustCompile(`compgen -W "--[^"]*"`).FindString(bashCompletion)
+	// pflag が暗黙に足す --help は usage に出ないため比較から外す。zsh は {-h,--help} と書くのでパターンに掛からない
+	got := map[string][]string{
+		"zsh":  matchedFlags(`(--[\w-]+)=?\[`, zshCompletion),
+		"bash": slices.DeleteFunc(matchedFlags(`(--[\w-]+)`, bashFlagList), func(f string) bool { return f == "--help" }),
+	}
+	for shell, flags := range got {
+		if !slices.Equal(flags, want) {
+			t.Errorf("%s completion flags = %v, want %v", shell, flags, want)
+		}
 	}
 }
 
