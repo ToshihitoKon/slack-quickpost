@@ -83,3 +83,21 @@ deleteChannel=$(echo "$postOutput" | yq -r '.channel')
 deleteTs=$(echo "$postOutput" | yq -r '.timestamp')
 deleteOutput=$("$binpath" --delete "https://slack.com/archives/${deleteChannel}/p${deleteTs//./}")
 [ "$deleteOutput" = "$postOutput" ]
+
+# delete snippet / file by file link
+# ファイル URL のユーザー部とファイル名も削除対象の特定に使われないため、ダミーで組み立てる
+deleteUploaded() {
+    local fileID
+    fileID=$(echo "$1" | yq -r '.file')
+    deleteOutput=$("$binpath" --delete "https://slack.com/files/U0/${fileID}/deleted")
+    [ "$deleteOutput" = "{\"file\":\"${fileID}\"}" ]
+}
+
+snippetOutput=$(post --text "case: this snippet will be deleted" --snippet)
+deleteUploaded "$snippetOutput"
+
+cat << EOS > "${tempdir}/slack-quickpost-test3.txt"
+case: this file will be deleted.
+EOS
+fileOutput=$(post --file "${tempdir}/slack-quickpost-test3.txt")
+deleteUploaded "$fileOutput"

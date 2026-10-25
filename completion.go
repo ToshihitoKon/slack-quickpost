@@ -2,8 +2,7 @@ package main
 
 import (
 	_ "embed"
-
-	"github.com/pkg/errors"
+	"errors"
 )
 
 var (

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"strings"
 	"testing"
 )
@@ -17,13 +18,13 @@ func TestDo(t *testing.T) {
 		mode         string
 		snippetMode  bool
 		filepath     string
-		deleteTarget MessageRef
+		deleteTarget deleteRef
 		expect       expect
 	}{
 		{
 			title:       "normal text",
 			text:        "",
-			mode:        "text",
+			mode:        modeText,
 			snippetMode: false,
 			expect: expect{
 				success:     true,
@@ -33,7 +34,7 @@ func TestDo(t *testing.T) {
 		{
 			title:       "snippet mode",
 			text:        strings.Repeat("a", 3000),
-			mode:        "text",
+			mode:        modeText,
 			snippetMode: true,
 			expect: expect{
 				success:     true,
@@ -41,9 +42,9 @@ func TestDo(t *testing.T) {
 			},
 		},
 		{
-			title:       "snippet (text over 3001 charactor)",
+			title:       "snippet (text over 3000 bytes)",
 			text:        strings.Repeat("a", 3001),
-			mode:        "text",
+			mode:        modeText,
 			snippetMode: false,
 			expect: expect{
 				success:     true,
@@ -53,7 +54,7 @@ func TestDo(t *testing.T) {
 		{
 			title:       "upload file",
 			snippetMode: true,
-			mode:        "file",
+			mode:        modeFile,
 			filepath:    "tests/upload.txt",
 			expect: expect{
 				success:     true,
@@ -62,11 +63,28 @@ func TestDo(t *testing.T) {
 		},
 		{
 			title:        "delete message",
-			mode:         "delete",
-			deleteTarget: MessageRef{channel: "C123", timestamp: "1700000000.000200"},
+			mode:         modeDeleteMessage,
+			deleteTarget: deleteRef{message: MessageRef{channel: "C123", timestamp: "1700000000.000200"}},
 			expect: expect{
 				success:     true,
-				contentType: "delete",
+				contentType: "delete-message",
+			},
+		},
+		{
+			title:        "delete file",
+			mode:         modeDeleteFile,
+			deleteTarget: deleteRef{fileID: "F0123ABCD"},
+			expect: expect{
+				success:     true,
+				contentType: "delete-file",
+			},
+		},
+		{
+			title: "unknown mode",
+			mode:  "",
+			expect: expect{
+				success:     false,
+				contentType: "",
 			},
 		},
 	}
@@ -76,6 +94,7 @@ func TestDo(t *testing.T) {
 			client := NewSlackMockClient()
 			opts := &Options{
 				slackClient: client,
+				infoOut:     io.Discard,
 				text:        tt.text,
 				mode:        tt.mode,
 
@@ -106,7 +125,7 @@ func TestDo(t *testing.T) {
 	}
 }
 
-func Test_parseMessageURL_validPermalink_returnsChannelAndTimestamp(t *testing.T) {
+func Test_parseDeleteURL_messagePermalink_returnsChannelAndTimestamp(t *testing.T) {
 	tests := []struct {
 		title string
 		url   string
@@ -118,18 +137,40 @@ func Test_parseMessageURL_validPermalink_returnsChannelAndTimestamp(t *testing.T
 	}
 	for _, tt := range tests {
 		t.Run(tt.title, func(t *testing.T) {
-			got, err := parseMessageURL(tt.url)
+			got, err := parseDeleteURL(tt.url)
 			if err != nil {
-				t.Fatalf("parseMessageURL(%q) error = %s", tt.url, err)
+				t.Fatalf("parseDeleteURL(%q) error = %s", tt.url, err)
 			}
-			if got != tt.want {
-				t.Errorf("parseMessageURL(%q) = %+v, want %+v", tt.url, got, tt.want)
+			if want := (deleteRef{message: tt.want}); got != want {
+				t.Errorf("parseDeleteURL(%q) = %+v, want %+v", tt.url, got, want)
 			}
 		})
 	}
 }
 
-func Test_parseMessageURL_invalidURL_returnsError(t *testing.T) {
+func Test_parseDeleteURL_fileURL_returnsFileID(t *testing.T) {
+	tests := []struct {
+		title string
+		url   string
+	}{
+		{"file url", "https://example.slack.com/files/U0123ABCD/F0123ABCD/report.txt"},
+		{"file url with encoded name", "https://example.slack.com/files/U0123ABCD/F0123ABCD/my%20report.txt"},
+		{"file url without name", "https://example.slack.com/files/U0123ABCD/F0123ABCD"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.title, func(t *testing.T) {
+			got, err := parseDeleteURL(tt.url)
+			if err != nil {
+				t.Fatalf("parseDeleteURL(%q) error = %s", tt.url, err)
+			}
+			if want := (deleteRef{fileID: "F0123ABCD"}); got != want {
+				t.Errorf("parseDeleteURL(%q) = %+v, want %+v", tt.url, got, want)
+			}
+		})
+	}
+}
+
+func Test_parseDeleteURL_invalidURL_returnsError(t *testing.T) {
 	tests := []struct {
 		title string
 		url   string
@@ -143,11 +184,13 @@ func Test_parseMessageURL_invalidURL_returnsError(t *testing.T) {
 		{"too short timestamp", "https://example.slack.com/archives/C0123ABCD/p123456"},
 		{"non digit timestamp", "https://example.slack.com/archives/C0123ABCD/p1234567890abcdef"},
 		{"trailing path segment", "https://example.slack.com/archives/C0123ABCD/p1234567890123456/extra"},
+		{"file url without file id", "https://example.slack.com/files/U0123ABCD"},
+		{"file id without F prefix", "https://example.slack.com/files/U0123ABCD/X0123ABCD/report.txt"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.title, func(t *testing.T) {
-			if got, err := parseMessageURL(tt.url); err == nil {
-				t.Errorf("parseMessageURL(%q) = %+v, want error", tt.url, got)
+			if got, err := parseDeleteURL(tt.url); err == nil {
+				t.Errorf("parseDeleteURL(%q) = %+v, want error", tt.url, got)
 			}
 		})
 	}
