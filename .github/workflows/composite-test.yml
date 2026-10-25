@@ -1,4 +1,4 @@
-name: release
+name: composite-test
 on:
   pull_request:
     branches:
