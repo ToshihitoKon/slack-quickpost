@@ -3,7 +3,7 @@ module github.com/ToshihitoKon/slack-quickpost
 go 1.26
 
 require (
-	github.com/slack-go/slack v0.30.1
+	github.com/slack-go/slack v0.36.0
 	github.com/spf13/pflag v1.1.0
 	gopkg.in/yaml.v3 v3.0.1
 )
